@@ -2,9 +2,10 @@ import React, { useMemo, useState } from 'react'
 import { HashRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { StoreProvider, useStore } from './store'
 import { PROJECT_TEMPLATES, type ProjectTemplate } from './projectTemplates'
+import type { CatalogItem } from './itemCatalog'
 import {
   ACCENTS, CATEGORIES, CATEGORY_FIELDS, CONDITIONS, CURRENCIES, HORIZONS, MOVE_KINDS, PROJECT_STATUS, REPEAT_OPTIONS, THEMES, addMonthsISO, catLabel, countAlerts, currencySymbol, fmtDate, fmtPrice, isLowStock, locationLabel,
-  moveKindLabel, norm, plusDays, projectProgress, repeatLabel, statusLabel, today, uid, warrantyUntil, type Accent, type Condition, type Currency, type Item, type MoveKind, type Project, type ProjectStatus, type Theme,
+  moveKindLabel, norm, plusDays, projectProgress, repeatLabel, statusLabel, today, uid, type Accent, type Condition, type Currency, type Item, type MoveKind, type Project, type ProjectStatus, type Theme, type QuickNote, type Log,
 } from './lib'
 import { Chevron, CondBadge, Empty, Field, Logo, Modal, Progress, SectionTitle, Skeleton, StatusBadge, Toaster, btnGhost, btnPrimary, inputCls } from './components'
 
@@ -29,19 +30,21 @@ function usePrefsEffect() {
     return () => mq.removeEventListener('change', apply)
   }, [prefs])
 }
-function Layout({ children, onAdd }: { children: React.ReactNode; onAdd: () => void }) {
+function Layout({ children }: { children: React.ReactNode }) {
   const store = useStore()
   usePrefsEffect()
   const alertTotal = countAlerts(store, store.prefs.horizon).total
   const tabs = [
-    { to: '/', label: 'Objets', badge: 0 },
+    { to: '/', label: 'Accueil', badge: 0 },
+    { to: '/objets', label: 'Objets', badge: 0 },
     { to: '/projets', label: 'Projets', badge: 0 },
+    { to: '/notes', label: 'Notes', badge: 0 },
     { to: '/alertes', label: 'Alertes', badge: alertTotal },
     { to: '/deplaces', label: 'Déplacés', badge: 0 },
     { to: '/reglages', label: 'Réglages', badge: 0 },
   ]
   const link = ({ isActive }: { isActive: boolean }) =>
-    `touch-target relative flex flex-1 sm:flex-none items-center justify-center sm:justify-start gap-1.5 rounded-xl px-1 sm:px-3 text-xs sm:text-sm font-medium ${isActive ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900' : 'hover:bg-neutral-200 dark:hover:bg-neutral-800'}`
+    `touch-target relative flex flex-none min-w-[4.5rem] items-center justify-center sm:justify-start gap-1.5 rounded-xl px-2 sm:px-3 text-xs sm:text-sm font-medium ${isActive ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900' : 'hover:bg-neutral-200 dark:hover:bg-neutral-800'}`
   const tabContent = (t: (typeof tabs)[number]) => (
     <>
       {t.label}
@@ -58,7 +61,6 @@ function Layout({ children, onAdd }: { children: React.ReactNode; onAdd: () => v
           <nav className="flex flex-col gap-1" aria-label="Navigation principale">
             {tabs.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className={link}>{tabContent(t)}</NavLink>)}
           </nav>
-          <button onClick={onAdd} className={`${btnPrimary} mt-2`}>+ Ajouter</button>
           <p className="mt-auto px-2 text-xs text-neutral-500">Un seul utilisateur.<br />Rapide, même d’une main.</p>
         </div>
       </aside>
@@ -67,20 +69,18 @@ function Layout({ children, onAdd }: { children: React.ReactNode; onAdd: () => v
           <h1 className="py-3"><LogoLink /></h1>
         </header>
         <main className="min-w-0 flex-1 px-4 pb-28 pt-2 sm:pb-10 sm:pt-6">{children}</main>
-        <nav aria-label="Navigation principale" className="fixed inset-x-0 bottom-0 z-40 border-t border-neutral-200 dark:border-neutral-800 bg-white/95 dark:bg-neutral-900/95 backdrop-blur sm:hidden pb-[env(safe-area-inset-bottom)]">
-          <div className="flex gap-1 p-2">
+        <nav aria-label="Navigation principale" className="fixed inset-x-0 bottom-0 z-40 overflow-x-auto border-t border-neutral-200 bg-white/95 pb-[env(safe-area-inset-bottom)] backdrop-blur dark:border-neutral-800 dark:bg-neutral-900/95 sm:hidden">
+          <div className="flex w-max min-w-full gap-1 p-2">
             {tabs.map((t) => <NavLink key={t.to} to={t.to} end={t.to === '/'} className={link}>{tabContent(t)}</NavLink>)}
           </div>
         </nav>
-        <button onClick={onAdd} aria-label="Ajout rapide"
-          className="sm:hidden fixed bottom-24 right-4 z-40 touch-target h-14 w-14 rounded-full bg-[var(--accent)] text-2xl font-bold text-[var(--accent-ink)] shadow-lg active:opacity-90">+</button>
       </div>
     </div>
   )
 }
 
 /* ================= Page liste : recherche instantanée + filtres ================= */
-function ItemsPage() {
+function ItemsPage({ onAdd }: { onAdd: () => void }) {
   const { items, locations, moves, ready } = useStore()
   const nav = useNavigate()
   const [q, setQ] = useState('')
@@ -125,6 +125,7 @@ function ItemsPage() {
     <div>
       <h2 className="sr-only">Objets du garage</h2>
       <div className="sticky top-0 z-10 sm:static bg-neutral-100 dark:bg-neutral-950 py-2">
+        <div className="mb-2 flex justify-end"><button onClick={onAdd} className={btnPrimary}>+ Ajouter un objet</button></div>
         <label className="block">
           <span className="sr-only">Rechercher un objet</span>
           <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Rechercher… (nom, lieu, réf)" autoComplete="off"
@@ -173,7 +174,7 @@ function ItemsPage() {
                   const l = locations.find((x) => x.id === i.locationId)
                   return (
                     <li key={i.id}>
-                      <button onClick={() => nav(`/objet/${i.id}`)}
+            <button onClick={() => nav(`/objet/${i.id}`)}
                         className="touch-target flex w-full items-center gap-3 rounded-2xl bg-white dark:bg-neutral-900 p-2 text-left shadow-sm active:scale-[0.99]">
                         <div aria-hidden className="flex h-16 w-16 shrink-0 items-center justify-center rounded-xl bg-neutral-200 dark:bg-neutral-800 text-lg font-bold">{i.name.slice(0, 1).toUpperCase()}</div>
                         <span className="min-w-0 flex-1">
@@ -221,8 +222,6 @@ function ItemDetailPage() {
     m.kind === 'pret' ? <>Prêté à <strong>{m.toWho}</strong></>
     : m.kind === 'reparation' ? <>En réparation chez <strong>{m.toWho}</strong></>
     : <>Déplacé : <strong>{m.toWho}</strong></>
-  const wUntil = warrantyUntil(item)
-  const wExpired = wUntil != null && wUntil < today()
 
   return (
     <div className="mx-auto w-full max-w-2xl">
@@ -236,11 +235,6 @@ function ItemDetailPage() {
           </div>
           <p className="text-sm text-neutral-500">{catLabel(item.category)} · Où : <strong className="text-neutral-800 dark:text-neutral-100">{locationLabel(loc)}</strong></p>
           {bought && <p className="text-xs text-neutral-500">{bought}</p>}
-          {wUntil && (
-            <p className={`text-xs ${wExpired ? 'font-semibold text-red-600 dark:text-red-400' : 'text-neutral-500'}`}>
-              Garantie jusqu’au {fmtDate(wUntil)}{wExpired ? ' (expirée)' : ''}
-            </p>
-          )}
           {activeMove && <p className="rounded-xl bg-amber-100 dark:bg-amber-900 px-3 py-2 text-sm">{moveText(activeMove)} depuis le {fmtDate(activeMove.since)}{activeMove.due ? ` · retour le ${fmtDate(activeMove.due)}` : ''}</p>}
           {item.isConsumable && (
             <div className="flex items-center gap-2">
@@ -402,7 +396,10 @@ export function QuickAddModal({ onClose, presetCat }: { onClose: () => void; pre
   const [price, setPrice] = useState('')
   const [boughtAt, setBoughtAt] = useState('')
   const [unit, setUnit] = useState('')
-  const [warranty, setWarranty] = useState('')
+  const [catalogOpen, setCatalogOpen] = useState(false)
+  const [catalogItems, setCatalogItems] = useState<CatalogItem[]>([])
+  const [catalogQuery, setCatalogQuery] = useState('')
+  const [catalogCategory, setCatalogCategory] = useState('toutes')
 
   const fields = CATEGORY_FIELDS[category] ?? []
 
@@ -417,7 +414,6 @@ export function QuickAddModal({ onClose, presetCat }: { onClose: () => void; pre
       price: price.trim() ? parseFloat(price.replace(',', '.')) || null : null,
       boughtAt: boughtAt || null,
       unit: isConsumable ? unit.trim() : '',
-      warranty: warranty.trim() ? parseInt(warranty) || null : null,
       updatedAt: new Date().toISOString(),
     }
     addItem(item)
@@ -426,9 +422,29 @@ export function QuickAddModal({ onClose, presetCat }: { onClose: () => void; pre
     nav(`/objet/${id}`)
   }
 
+  if (catalogOpen) {
+    const matches = catalogItems.filter((entry) => (catalogCategory === 'toutes' || entry.category === catalogCategory) && norm(entry.name).includes(norm(catalogQuery))).slice(0, 100)
+    return <Modal title="Banque d’objets usuels" onClose={() => setCatalogOpen(false)}>
+      <div className="space-y-3">
+        <input autoFocus value={catalogQuery} onChange={(e) => setCatalogQuery(e.target.value)} placeholder="Rechercher un objet…" className={inputCls} />
+        <select value={catalogCategory} onChange={(e) => setCatalogCategory(e.target.value)} className={inputCls}>
+          <option value="toutes">Toutes les catégories</option>{CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+        </select>
+        <p className="text-xs text-neutral-500">{matches.length} suggestions. Choisissez un objet pour préremplir sa fiche.</p>
+        <div className="max-h-[48dvh] overflow-y-auto rounded-xl border border-neutral-200 dark:border-neutral-700">
+          {matches.map((entry) => <button key={`${entry.category}-${entry.name}`} onClick={() => { setName(entry.name); setCategory(entry.category); setIsConsumable(Boolean(entry.consumable)); setUnit(entry.unit ?? ''); setCatalogOpen(false) }} className="flex min-h-11 w-full items-center justify-between gap-2 border-b border-neutral-100 px-3 py-2 text-left text-sm last:border-0 hover:bg-neutral-100 dark:border-neutral-800 dark:hover:bg-neutral-800"><span>{entry.name}</span><span className="text-xs text-neutral-500">{CATEGORIES.find((c) => c.id === entry.category)?.label}</span></button>)}
+          {!catalogItems.length && <p className="p-4 text-sm text-neutral-500">Chargement de la banque…</p>}
+          {catalogItems.length > 0 && !matches.length && <p className="p-4 text-sm text-neutral-500">Aucun résultat. Vous pouvez saisir un nom librement.</p>}
+        </div>
+        <button className={btnGhost} onClick={() => setCatalogOpen(false)}>Retour à la fiche</button>
+      </div>
+    </Modal>
+  }
+
   return (
     <Modal title="Ajout rapide" onClose={onClose}>
       <div className="space-y-3">
+        <button type="button" className={`${btnGhost} w-full`} onClick={() => { setCatalogOpen(true); if (!catalogItems.length) void import('./itemCatalog').then((module) => setCatalogItems(module.ITEM_CATALOG)) }}>Parcourir la banque d’objets usuels</button>
         <Field label="Nom *"><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Clé Allen 5" className={inputCls} /></Field>
         <Field label="Catégorie *">
           <select value={category} onChange={(e) => { setCategory(e.target.value); setDetails({}) }} className={inputCls}>
@@ -462,12 +478,8 @@ export function QuickAddModal({ onClose, presetCat }: { onClose: () => void; pre
                 </div>
                 <div className="grid grid-cols-2 gap-2">
                   <Field label="Seuil d'alerte"><input inputMode="numeric" value={threshold} onChange={(e) => setThreshold(e.target.value)} className={inputCls} /></Field>
-                  <Field label="Garantie (mois)"><input inputMode="numeric" value={warranty} onChange={(e) => setWarranty(e.target.value)} placeholder="Ex. 24" className={inputCls} /></Field>
                 </div>
               </>
-            )}
-            {!isConsumable && (
-              <Field label="Garantie (mois)"><input inputMode="numeric" value={warranty} onChange={(e) => setWarranty(e.target.value)} placeholder="Ex. 24" className={inputCls} /></Field>
             )}
             {fields.map((f) => (
               <Field key={f.key} label={f.label}>
@@ -485,6 +497,69 @@ export function QuickAddModal({ onClose, presetCat }: { onClose: () => void; pre
       </div>
     </Modal>
   )
+}
+
+/* ================= Tableau de bord ================= */
+function DashboardPage() {
+  const s = useStore()
+  const nav = useNavigate()
+  const alerts = countAlerts(s, s.prefs.horizon)
+  const activeProjects = s.projects.filter((p) => p.status === 'encours').length
+  const lowStock = s.items.filter(isLowStock).length
+  const totalValue = s.items.reduce((sum, item) => sum + (item.price ?? 0) * (item.quantity ?? 1), 0)
+  if (!s.ready) return <Skeleton />
+  return <div className="mx-auto w-full max-w-4xl space-y-5">
+    <header><p className="text-sm font-medium text-[var(--accent)]">Garage 2 · votre atelier, en un coup d’œil</p><h2 className="mt-1 text-2xl font-bold">Bonjour, prêt à bricoler ?</h2></header>
+    <section className="grid overflow-hidden rounded-3xl bg-gradient-to-br from-amber-100 via-orange-50 to-sky-100 dark:from-amber-950/70 dark:via-neutral-900 dark:to-sky-950/70 md:grid-cols-[1fr_0.9fr]" aria-label="Illustration de l’atelier">
+      <div className="flex flex-col justify-center p-6 md:p-8"><span className="text-sm font-semibold text-amber-900 dark:text-amber-200">Tout votre atelier, au même endroit</span><h3 className="mt-2 text-2xl font-bold">Des idées aux projets terminés.</h3><p className="mt-2 max-w-md text-sm text-neutral-700 dark:text-neutral-300">Retrouvez vos objets, suivez les petits entretiens et gardez vos prochaines idées sous la main.</p><div className="mt-4 flex flex-wrap gap-2"><button className={btnPrimary} onClick={() => nav('/objets')}>Voir mes objets</button><button className={btnGhost} onClick={() => nav('/projets')}>Ouvrir mes projets</button></div></div>
+      <div className="min-h-48 p-4 md:p-6"><svg viewBox="0 0 420 260" role="img" aria-label="Illustration chaleureuse d’un garage avec établi et outils" className="h-full min-h-48 w-full" xmlns="http://www.w3.org/2000/svg"><rect x="28" y="32" width="364" height="198" rx="18" fill="currentColor" opacity=".08"/><path d="M52 112 210 44l158 68v104H52z" fill="#f8fafc" stroke="#475569" strokeWidth="6" strokeLinejoin="round"/><path d="M40 114 210 38l170 76" fill="none" stroke="#d97706" strokeWidth="10" strokeLinecap="round" strokeLinejoin="round"/><path d="M77 123h266v87H77z" fill="#e2e8f0" stroke="#475569" strokeWidth="5"/><path d="M91 146h103v63H91zm128 0h102v63H219z" fill="#bfdbfe" stroke="#64748b" strokeWidth="4"/><path d="M61 211h292" stroke="#475569" strokeWidth="8" strokeLinecap="round"/><path d="M95 211v21m222-21v21" stroke="#475569" strokeWidth="8" strokeLinecap="round"/><path d="m121 94 16-15 29 29-16 16zm133 9 17-17 30 29-17 17z" fill="#f59e0b" stroke="#92400e" strokeWidth="4"/><path d="M145 145v36m-10-18h20m116-18v36m-10-18h20" stroke="#0369a1" strokeWidth="6" strokeLinecap="round"/><circle cx="349" cy="75" r="19" fill="#fde68a"/><path d="M349 59v32m-16-16h32" stroke="#b45309" strokeWidth="4" strokeLinecap="round"/><path d="M74 201c-15 1-22-9-18-21 2-8 12-10 19-4 8-7 20-3 20 7 0 10-8 17-21 18z" fill="#16a34a"/><path d="M48 221h322" stroke="#94a3b8" strokeWidth="4" strokeDasharray="10 10"/></svg></div>
+    </section>
+    <section className="grid grid-cols-2 gap-3 sm:grid-cols-4" aria-label="Résumé du garage">{[
+      { value: String(s.items.length), label: 'Objets suivis', icon: '🧰', to: '/objets' },
+      { value: String(activeProjects), label: 'Projets en cours', icon: '🛠️', to: '/projets' },
+      { value: String(alerts.total), label: 'Alertes à suivre', icon: '🔔', to: '/alertes' },
+      { value: totalValue ? `~${fmtPrice(Math.round(totalValue), s.prefs.currency)}` : '—', label: 'Valeur estimée', icon: '📦', to: '/objets' },
+    ].map((card) => <button key={card.label} onClick={() => nav(card.to)} className="rounded-2xl bg-white p-4 text-left shadow-sm transition hover:-translate-y-0.5 dark:bg-neutral-900"><span className="text-xl" aria-hidden>{card.icon}</span><span className="mt-2 block text-xl font-bold">{card.value}</span><span className="text-xs text-neutral-500">{card.label}</span></button>)}</section>
+    <section className="grid gap-3 sm:grid-cols-2"><button onClick={() => nav('/alertes')} className="rounded-2xl bg-white p-4 text-left shadow-sm dark:bg-neutral-900"><span className="font-semibold">À surveiller</span><p className="mt-1 text-sm text-neutral-500">{lowStock ? `${lowStock} stock${lowStock > 1 ? 's' : ''} sous le seuil` : alerts.total ? `${alerts.total} point${alerts.total > 1 ? 's' : ''} à consulter` : 'Tout est en ordre pour le moment.'}</p><span className="mt-3 inline-block text-sm font-semibold text-[var(--accent)]">Voir les alertes →</span></button><button onClick={() => nav('/notes')} className="rounded-2xl bg-white p-4 text-left shadow-sm dark:bg-neutral-900"><span className="font-semibold">Notes rapides</span><p className="mt-1 text-sm text-neutral-500">{s.quickNotes.length ? `${s.quickNotes.length} note${s.quickNotes.length > 1 ? 's' : ''} enregistrée${s.quickNotes.length > 1 ? 's' : ''}` : 'Gardez une mesure ou une idée à portée de main.'}</p><span className="mt-3 inline-block text-sm font-semibold text-[var(--accent)]">Ouvrir les notes →</span></button></section>
+  </div>
+}
+
+/* ================= Notes rapides synchronisées ================= */
+function NotesPage() {
+  const { quickNotes, addQuickNote, updateQuickNote, removeQuickNote, ready } = useStore()
+  const [title, setTitle] = useState('')
+  const [body, setBody] = useState('')
+  const [editingId, setEditingId] = useState<string | null>(null)
+  const [editTitle, setEditTitle] = useState('')
+  const [editBody, setEditBody] = useState('')
+  if (!ready) return <Skeleton />
+
+  const save = (event: React.FormEvent) => {
+    event.preventDefault()
+    const text = body.trim()
+    if (!text) return
+    const now = new Date().toISOString()
+    addQuickNote({ id: uid(), title: title.trim(), body: text, createdAt: now, updatedAt: now })
+    setTitle(''); setBody('')
+  }
+  const notes = [...quickNotes].sort((a, b) => b.updatedAt.localeCompare(a.updatedAt))
+  return <div className="mx-auto w-full max-w-2xl space-y-4">
+    <header><h2 className="text-xl font-bold">Notes rapides</h2><p className="mt-1 text-sm text-neutral-500">Idées, mesures et rappels partagés entre vos appareils.</p></header>
+    <form onSubmit={save} className="space-y-3 rounded-2xl bg-white p-4 shadow-sm dark:bg-neutral-900">
+      <label className="block"><span className="mb-1 block text-sm font-medium">Titre <span className="text-neutral-500">(facultatif)</span></span><input value={title} onChange={(e) => setTitle(e.target.value)} maxLength={120} placeholder="Ex. Mesures de l’étagère" className={inputCls} /></label>
+      <label className="block"><span className="mb-1 block text-sm font-medium">Note</span><textarea value={body} onChange={(e) => setBody(e.target.value)} maxLength={10000} required rows={4} placeholder="Saisissez une note…" className={inputCls} /></label>
+      <div className="flex items-center justify-between gap-2"><span className="text-xs text-neutral-500">{body.length}/10 000</span><button className={btnPrimary} disabled={!body.trim()}>Enregistrer</button></div>
+    </form>
+    {!notes.length ? <Empty title="Aucune note pour le moment" hint="Ajoutez une note rapide ci-dessus. Elle sera synchronisée avec Supabase." /> : <ul className="space-y-3">{notes.map((note: QuickNote) => <li key={note.id} className="rounded-2xl bg-white p-4 shadow-sm dark:bg-neutral-900">
+      {editingId === note.id ? <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (!editBody.trim()) return; updateQuickNote(note.id, { title: editTitle.trim(), body: editBody.trim() }); setEditingId(null) }}>
+        <input value={editTitle} onChange={(e) => setEditTitle(e.target.value)} maxLength={120} placeholder="Titre (facultatif)" className={inputCls} />
+        <textarea value={editBody} onChange={(e) => setEditBody(e.target.value)} maxLength={10000} required rows={4} className={inputCls} />
+        <div className="flex justify-end gap-2"><button type="button" className={btnGhost} onClick={() => setEditingId(null)}>Annuler</button><button className={btnPrimary}>Enregistrer</button></div>
+      </form> : <>
+        <div className="flex items-start justify-between gap-3"><div className="min-w-0"><h3 className="font-semibold">{note.title || 'Note sans titre'}</h3><p className="mt-1 whitespace-pre-wrap break-words text-sm">{note.body}</p><time className="mt-3 block text-xs text-neutral-500" dateTime={note.updatedAt}>Modifiée le {fmtDate(note.updatedAt)}</time></div><div className="flex shrink-0 gap-1"><button className={btnGhost} onClick={() => { setEditingId(note.id); setEditTitle(note.title); setEditBody(note.body) }}>Modifier</button><button className={btnGhost} aria-label="Supprimer la note" onClick={() => removeQuickNote(note.id)}>Supprimer</button></div></div>
+      </>}
+    </li>)}</ul>}
+  </div>
 }
 
 /* ================= Projets DIY : liste ================= */
@@ -704,8 +779,11 @@ function ProjectDetailPage() {
 
 /* ================= Alertes : à racheter + rappels ================= */
 function AlertsPage() {
-  const { items, logs, locations, moves, tasks, projects, prefs, addLog, updateLog, showToast } = useStore()
+  const { items, logs, locations, moves, tasks, projects, prefs, addLog, updateLog, removeLog, updateItem, showToast } = useStore()
   const nav = useNavigate()
+  const [alertEditor, setAlertEditor] = useState<Log | null>(null)
+  const [creatingAlert, setCreatingAlert] = useState(false)
+  const [stockEditor, setStockEditor] = useState<Item | null>(null)
   const t = today()
   const horizon = prefs.horizon
   const itemOf = (id: string) => items.find((x) => x.id === id)
@@ -746,32 +824,30 @@ function AlertsPage() {
   const lateMoves = moves
     .filter((l) => !l.returned && l.due != null && l.due < t)
     .sort((a, b) => (a.due ?? '').localeCompare(b.due ?? ''))
-  const guarantees = items
-    .map((i) => ({ i, u: warrantyUntil(i) }))
-    .filter(({ u }) => u != null && u <= plusDays(60))
-    .sort((a, b) => (a.u ?? '').localeCompare(b.u ?? ''))
 
   return (
     <div className="mx-auto w-full max-w-2xl space-y-6">
+      <header className="flex items-center justify-between gap-2"><div><h2 className="text-xl font-bold">Alertes</h2><p className="text-sm text-neutral-500">Gérez ici vos rappels et seuils de stock.</p></div><button className={btnPrimary} onClick={() => setCreatingAlert(true)}>+ Ajouter une alerte</button></header>
       <section aria-label="Courses">
         <SectionTitle aside={courses.length > 0 ? `${courses.length} article${courses.length > 1 ? 's' : ''}` : undefined}>Courses ({courses.length})</SectionTitle>
         {courses.length === 0 ? <Empty title="Rien à acheter" hint="Consommables sous leur seuil et matériaux manquants apparaîtront ici." /> : (
           <ul className="space-y-2">{courses.map((c) => (
-            <li key={c.key}><button onClick={() => nav(c.go)} className="flex w-full items-center gap-2 rounded-2xl bg-white dark:bg-neutral-900 p-3 text-left text-sm shadow-sm active:scale-[0.99]">
+            <li key={c.key} className="flex items-center gap-2 rounded-2xl bg-white p-3 text-sm shadow-sm dark:bg-neutral-900"><button onClick={() => nav(c.go)} className="flex min-w-0 flex-1 items-center gap-2 text-left active:scale-[0.99]">
               <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={c.name}>{c.name}</span>
                 <span className="block truncate text-xs text-neutral-500">{c.detail}</span></span>
               <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">{c.need}</span>
               <Chevron />
-            </button></li>))}</ul>)}
+            </button>{c.key.startsWith('s-') && itemOf(c.key.slice(2)) && <><button className={btnGhost} onClick={() => setStockEditor(itemOf(c.key.slice(2))!)}>Modifier</button><button className={btnGhost} aria-label={`Retirer l’alerte de stock pour ${c.name}`} onClick={() => { const item = itemOf(c.key.slice(2)); if (item) { updateItem(item.id, { threshold: null }); showToast('Alerte de stock retirée') } }}>Retirer</button></>}</li>))}</ul>)}
       </section>
       <section aria-label="Rappels d'entretien">
         <SectionTitle>Rappels ({soon.length})</SectionTitle>
         {soon.length === 0 ? <Empty title="Aucun rappel" hint="Ajoutez un rappel depuis la fiche d’un objet." /> : (
           <ul className="space-y-2">{soon.map((l) => (
-            <li key={l.id} className="rounded-2xl bg-white dark:bg-neutral-900 p-3 text-sm shadow-sm">
+            <li key={l.id} className="rounded-2xl bg-white p-3 text-sm shadow-sm dark:bg-neutral-900">
               <div className="flex gap-2"><strong className="truncate flex-1">{l.action} — {itemOf(l.itemId)?.name ?? 'Objet supprimé'}</strong>
                 <span className={`shrink-0 font-semibold ${l.reminder! < t ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>{fmtDate(l.reminder)}</span></div>
               <p className="text-xs text-neutral-500">Où : {locationLabel(locations.find((x) => x.id === itemOf(l.itemId)?.locationId))}</p>
+              <div className="mt-2 flex justify-end gap-2"><button className={btnGhost} onClick={() => setAlertEditor(l)}>Modifier</button><button className={btnGhost} onClick={() => removeLog(l.id)}>Retirer</button></div>
             </li>))}</ul>)}
       </section>
       <section aria-label="Entretiens à refaire">
@@ -788,8 +864,13 @@ function AlertsPage() {
                 addLog({ id: uid(), itemId: l.itemId, date: today(), action: l.action, note: '', reminder: null, repeat: l.repeat })
                 showToast('Entretien marqué refait')
               }}>Refait ✓</button>
+              <button aria-label={`Modifier l’alerte ${l.action}`} className={`${btnGhost} px-2 text-xs`} onClick={() => setAlertEditor(l)}>✎</button>
+              <button aria-label={`Retirer l’alerte ${l.action}`} className={`${btnGhost} px-2 text-xs`} onClick={() => removeLog(l.id)}>×</button>
             </li>))}</ul>)}
       </section>
+      {creatingAlert && <AlertEditorModal items={items} onClose={() => setCreatingAlert(false)} onSave={(entry) => { addLog(entry); showToast('Alerte ajoutée'); setCreatingAlert(false) }} />}
+      {alertEditor && <AlertEditorModal key={alertEditor.id} items={items} value={alertEditor} onClose={() => setAlertEditor(null)} onSave={(entry) => { updateLog(entry.id, entry); showToast('Alerte modifiée'); setAlertEditor(null) }} />}
+      {stockEditor && <StockAlertModal key={stockEditor.id} item={stockEditor} onClose={() => setStockEditor(null)} onSave={(patch) => { updateItem(stockEditor.id, patch); showToast('Alerte de stock mise à jour'); setStockEditor(null) }} />}
       <section aria-label="Objets à récupérer">
         <SectionTitle>À récupérer ({lateMoves.length})</SectionTitle>
         {lateMoves.length === 0 ? <Empty title="Aucun retard" hint="Les objets déplacés dont la date de retour est passée apparaîtront ici." /> : (
@@ -801,19 +882,41 @@ function AlertsPage() {
               <Chevron />
             </button></li>))}</ul>)}
       </section>
-      <section aria-label="Garanties">
-        <SectionTitle>Garanties ({guarantees.length})</SectionTitle>
-        {guarantees.length === 0 ? <Empty title="Garanties OK" hint="Renseignez date d’achat + garantie sur vos outils et appareils." /> : (
-          <ul className="space-y-2">{guarantees.map(({ i, u }) => (
-            <li key={i.id}><button onClick={() => nav(`/objet/${i.id}`)} className="flex w-full items-center gap-2 rounded-2xl bg-white dark:bg-neutral-900 p-3 text-left text-sm shadow-sm">
-              <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={i.name}>{i.name}</span>
-                <span className="block truncate text-xs text-neutral-500">Jusqu’au {fmtDate(u)}</span></span>
-              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${u! < t ? 'bg-red-600 text-white' : 'bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100'}`}>{u! < t ? 'Expirée' : 'Expire bientôt'}</span>
-              <Chevron />
-            </button></li>))}</ul>)}
-      </section>
     </div>
   )
+}
+
+function AlertEditorModal({ items, value, onClose, onSave }: { items: Item[]; value?: Log; onClose: () => void; onSave: (entry: Log) => void }) {
+  const [itemId, setItemId] = useState(value?.itemId ?? items[0]?.id ?? '')
+  const [action, setAction] = useState(value?.action ?? '')
+  const [note, setNote] = useState(value?.note ?? '')
+  const [date, setDate] = useState(value?.date ?? today())
+  const [reminder, setReminder] = useState(value?.reminder ?? today())
+  const [repeat, setRepeat] = useState(value?.repeat ?? '')
+  return <Modal title={value ? 'Modifier une alerte' : 'Nouvelle alerte'} onClose={onClose}>
+    <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (!itemId || !action.trim()) return; onSave({ id: value?.id ?? uid(), itemId, action: action.trim(), note: note.trim(), date, reminder: reminder || null, repeat }) }}>
+      <Field label="Objet *"><select required value={itemId} onChange={(e) => setItemId(e.target.value)} className={inputCls}><option value="">Choisir un objet</option>{items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}</select></Field>
+      <Field label="Rappel *"><input required maxLength={160} value={action} onChange={(e) => setAction(e.target.value)} placeholder="Ex. Graisser la chaîne" className={inputCls} /></Field>
+      <div className="grid grid-cols-2 gap-2"><Field label="Date du dernier entretien"><input required type="date" value={date} onChange={(e) => setDate(e.target.value)} className={inputCls} /></Field><Field label="M’avertir le"><input type="date" value={reminder ?? ''} onChange={(e) => setReminder(e.target.value)} className={inputCls} /></Field></div>
+      <Field label="Récurrence"><select value={repeat} onChange={(e) => setRepeat(e.target.value)} className={inputCls}>{REPEAT_OPTIONS.map((r) => <option key={r.id} value={r.id}>{r.label}</option>)}</select></Field>
+      <Field label="Détails (facultatif)"><textarea value={note} onChange={(e) => setNote(e.target.value)} rows={3} maxLength={2000} className={inputCls} /></Field>
+      <button className={`${btnPrimary} w-full`} disabled={!itemId || !action.trim()}>{value ? 'Enregistrer les modifications' : 'Ajouter le rappel'}</button>
+    </form>
+  </Modal>
+}
+
+function StockAlertModal({ item, onClose, onSave }: { item: Item; onClose: () => void; onSave: (patch: Partial<Item>) => void }) {
+  const [quantity, setQuantity] = useState(String(item.quantity ?? 0))
+  const [threshold, setThreshold] = useState(String(item.threshold ?? 0))
+  return <Modal title="Alerte de stock" onClose={onClose}>
+    <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); const q = Number(quantity); const limit = Number(threshold); if (!Number.isFinite(q) || !Number.isFinite(limit) || q < 0 || limit < 0) return; onSave({ quantity: Math.floor(q), threshold: Math.floor(limit) }) }}>
+      <p className="text-sm text-neutral-500">{item.name}</p>
+      <Field label={`Stock actuel${item.unit ? ` (${item.unit})` : ''}`}><input type="number" inputMode="numeric" min="0" step="1" required value={quantity} onChange={(e) => setQuantity(e.target.value)} className={inputCls} /></Field>
+      <Field label="M’alerter quand le stock atteint"><input type="number" inputMode="numeric" min="0" step="1" required value={threshold} onChange={(e) => setThreshold(e.target.value)} className={inputCls} /></Field>
+      <button className={`${btnPrimary} w-full`}>Enregistrer</button>
+      <button type="button" className={`${btnGhost} w-full`} onClick={() => onSave({ threshold: null })}>Désactiver cette alerte</button>
+    </form>
+  </Modal>
 }
 
 /* ================= Objets déplacés (prêtés, ailleurs, en réparation) ================= */
@@ -892,7 +995,7 @@ function SettingsPage() {
   const value = s.items.reduce((sum, i) => sum + (i.price != null ? i.price * (i.quantity ?? 1) : 0), 0)
 
   function exportJSON() {
-    const blob = new Blob([JSON.stringify({ items: s.items, locations: s.locations, logs: s.logs, moves: s.moves, projects: s.projects, tasks: s.tasks, prefs: s.prefs }, null, 2)], { type: 'application/json' })
+    const blob = new Blob([JSON.stringify({ items: s.items, locations: s.locations, logs: s.logs, moves: s.moves, projects: s.projects, tasks: s.tasks, quickNotes: s.quickNotes, prefs: s.prefs }, null, 2)], { type: 'application/json' })
     const a = document.createElement('a')
     a.href = URL.createObjectURL(blob); a.download = `garage2-${today()}.json`; a.click()
     URL.revokeObjectURL(a.href)
@@ -905,7 +1008,7 @@ function SettingsPage() {
       try {
         const d = JSON.parse(String(r.result))
         if (!Array.isArray(d.items)) throw new Error('bad')
-        s.replaceAll({ items: d.items, locations: d.locations ?? [], logs: d.logs ?? [], moves: d.moves ?? [], projects: d.projects ?? [], tasks: d.tasks ?? [], prefs: d.prefs ?? s.prefs })
+        s.replaceAll({ items: d.items, locations: d.locations ?? [], logs: d.logs ?? [], moves: d.moves ?? [], projects: d.projects ?? [], tasks: d.tasks ?? [], quickNotes: d.quickNotes ?? [], prefs: d.prefs ?? s.prefs })
         s.showToast('Import réussi')
       } catch { s.showToast('Fichier invalide') }
     }
@@ -1030,12 +1133,14 @@ function Shell() {
   }
   if (store.cloud && !store.userEmail) return location.pathname === '/connexion' ? <LoginScreen /> : <Navigate to="/connexion" replace state={{ from: location.pathname + location.search }} />
   return (
-    <Layout onAdd={() => setAddOpen(true)}>
+    <Layout>
       <Routes>
-        <Route path="/" element={<ItemsPage />} />
+        <Route path="/" element={<DashboardPage />} />
+        <Route path="/objets" element={<ItemsPage onAdd={() => setAddOpen(true)} />} />
         <Route path="/objet/:id" element={<ItemDetailPage />} />
         <Route path="/projets" element={<ProjectsPage />} />
         <Route path="/projet/:id" element={<ProjectDetailPage />} />
+        <Route path="/notes" element={<NotesPage />} />
         <Route path="/alertes" element={<AlertsPage />} />
         <Route path="/deplaces" element={<MovesPage />} />
         <Route path="/reglages" element={<SettingsPage />} />

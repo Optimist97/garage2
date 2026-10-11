@@ -8,17 +8,18 @@ Application personnelle d’inventaire de garage et de suivi DIY, en français e
 
 ```text
 App.tsx ──useStore()──> store.tsx ──> localStorage + Supabase Auth/PostgREST
-                             ├── mapping des six tables et file des écritures hors ligne
+                             ├── mapping des sept tables et file des écritures hors ligne
                              ├── migrations/import local JSON
                              └── marquage/filtrage des données de démonstration
 lib.ts : types, constantes, validation, dates, alertes et client Supabase
 projectTemplates.ts : modèles statiques copiés en projets utilisateur normaux
+itemCatalog.ts : catalogue d'objets usuels chargé à la demande
 components.tsx : primitives UI accessibles partagées
 ```
 
 ## Données et synchronisation
 
-Les six ensembles synchronisés sont `locations`, `items`, `maintenance_logs`, `moves`, `projects`, `project_tasks`. Chaque ligne cloud inclut `user_id`; RLS autorise uniquement le compte connecté. La première connexion fusionne les lignes locales manquantes et préserve les valeurs cloud pour les mêmes UUID. Un marqueur par utilisateur évite qu’un vieux cache recrée plus tard des données supprimées. Les six tables sont incluses dans `supabase_realtime`; un événement autorisé lance un `pull()` groupé avec debounce. Le focus/retour de visibilité déclenche également une reprise. Les écritures échouées sont placées dans une file par compte et retentées à la prochaine synchronisation. Au changement de session, le store recharge les données cloud. Les préférences d’affichage, y compris la visibilité démo, restent propres à chaque appareil.
+Les sept ensembles synchronisés sont `locations`, `items`, `maintenance_logs`, `moves`, `projects`, `project_tasks`, `quick_notes`. Chaque ligne cloud inclut `user_id`; RLS autorise uniquement le compte connecté. La première connexion fusionne les lignes locales manquantes et préserve les valeurs cloud pour les mêmes UUID. Un marqueur par utilisateur évite qu’un vieux cache recrée plus tard des données supprimées. Les sept tables sont incluses dans `supabase_realtime`; un événement autorisé lance un `pull()` groupé avec debounce. Le focus/retour de visibilité déclenche également une reprise. Les écritures échouées sont placées dans une file par compte et retentées à la prochaine synchronisation. Au changement de session, le store recharge les données cloud. Les préférences d’affichage, y compris la visibilité démo, restent propres à chaque appareil.
 
 ## Démonstration et modèles
 
@@ -31,6 +32,7 @@ La bibliothèque de 9 modèles est intégrée dans `src/projectTemplates.ts`, sa
 - `src/lib.ts` : catégories, propriétés de fiche, `Item/Location/Log/Move/Project/Task`, alertes, préférences, formats, Supabase lazy.
 - `src/store.tsx` : API métier unique, migration des anciennes données, état session, sync cloud, opérations CRUD et file de reprise réseau. Toute colonne ajoutée exige mapping dans les deux sens ici.
 - `src/projectTemplates.ts` : données éditoriales de la bibliothèque.
+- `src/itemCatalog.ts` : banque locale de références usuelles préremplissant le formulaire objet; import dynamique pour ne pas charger le catalogue au démarrage.
 - `src/App.tsx` : routes et interfaces; page de connexion dédiée (`#/connexion`), envoi du lien de réinitialisation et formulaire de mise à jour; Réglages, démo et modèles.
 - `src/components.tsx` / `src/index.css` : modales, primitives, focus, tailles tactiles et responsive.
 - `supabase/schema.sql` : SQL réexécutable pour le schéma, migrations, contraintes, indexes, RLS/grants.
@@ -47,6 +49,8 @@ La bibliothèque de 9 modèles est intégrée dans `src/projectTemplates.ts`, sa
 ## Sécurité et déploiement
 
 Le dépôt et le bundle GitHub Pages sont publics. Toute variable `VITE_*` est visible côté navigateur : seules l’URL du projet et la clé anon/publishable sont admissibles, jamais `service_role`, secret key, mot de passe ni fichier `.env`. Les tables refusent les requêtes anonymes et appliquent RLS `auth.uid() = user_id`; `authenticated` ne reçoit que `SELECT`, `INSERT`, `UPDATE`, `DELETE` (sans `TRUNCATE`, `TRIGGER` ni `REFERENCES`). Les liens inter-tables utilisent des FK composées sur `user_id`. Les anciens champs `photo_url` éventuels sont conservés en base comme historique inerte, mais ne sont plus lus ni écrits par l’application. La fonction photo et les contrôles de capture/import sont supprimés.
+
+L'interface principale est organisée dans cet ordre : Accueil, Objets, Projets, Notes, Alertes, Déplacés, Réglages. `#/` affiche le tableau de bord illustré, `#/objets` l'inventaire. Les notes rapides sont personnelles et synchronisées. Depuis Alertes, les rappels d'entretien peuvent être ajoutés, modifiés, retirés (avec annulation), et les seuils de stock ajustés ou désactivés. La gestion des garanties a été retirée; la colonne historique `warranty_months`, si elle existe déjà en base, est ignorée.
 
 Configurer `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` comme GitHub Actions Secrets pour l’organisation/dépôt `Optimist97/garage2`, pas dans le code. Autoriser `https://optimist97.github.io/garage2/` dans Auth URL Configuration. Maintenir l’inscription publique désactivée; le compte propriétaire est créé depuis le dashboard Supabase. La page `#/connexion` utilise `signInWithPassword`; le lien de réinitialisation redirige vers l’application et le changement depuis Réglages vérifie le mot de passe actuel avec Supabase Auth. La livraison réelle d’un lien vers une adresse externe demande un SMTP personnalisé; le SMTP intégré est limité aux membres de l’organisation et soumis à un faible quota. Configurer l’URL de redirection Supabase pour Pages et un SMTP personnalisé pour livrer les courriels aux adresses hors membres de l’organisation; le SMTP par défaut est de test, restreint et à faible quota.
 

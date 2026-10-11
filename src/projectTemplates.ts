@@ -70,10 +70,10 @@ export const PROJECT_TEMPLATES: ProjectTemplate[] = [
   },
   {
     id: 'tool-repair', group: 'Réparation', title: 'Diagnostiquer un outil défectueux', summary: 'Consigner le défaut et décider de réparer ou remplacer.', budget: 50,
-    notes: 'Débrancher l’outil et retirer la batterie avant toute inspection. Ne pas ouvrir un appareil sous garantie ni un équipement haute tension.',
+    notes: 'Débrancher l’outil et retirer la batterie avant toute inspection. Ne pas ouvrir un équipement haute tension.',
     tasks: [
       { label: 'Décrire le symptôme et la date d’apparition' }, { label: 'Débrancher et inspecter l’état extérieur' },
-      { label: 'Vérifier garantie, notice et pièces disponibles' }, { label: 'Demander un devis si une intervention est nécessaire' },
+      { label: 'Vérifier la notice et les pièces disponibles' }, { label: 'Demander un devis si une intervention est nécessaire' },
       { label: 'Décider : réparation, remplacement ou recyclage' }, { label: 'Mettre à jour la fiche et le journal d’entretien' },
     ],
   },

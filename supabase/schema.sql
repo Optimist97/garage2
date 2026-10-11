@@ -28,7 +28,7 @@ create table if not exists public.items (
   price numeric(12,2) check (price is null or price >= 0),
   bought_at date,
   unit text not null default '',
-  warranty_months integer check (warranty_months is null or warranty_months >= 0),
+  -- Les installations historiques peuvent encore avoir warranty_months ; le client ne l'utilise plus.
   is_demo boolean not null default false,
   created_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
@@ -78,7 +78,6 @@ alter table public.moves add constraint moves_kind_check check (kind in ('pret',
 alter table public.items add column if not exists price numeric(12,2);
 alter table public.items add column if not exists bought_at date;
 alter table public.items add column if not exists unit text not null default '';
-alter table public.items add column if not exists warranty_months integer;
 alter table public.maintenance_logs add column if not exists repeat text not null default '';
 alter table public.locations add column if not exists is_demo boolean not null default false;
 alter table public.items add column if not exists is_demo boolean not null default false;
@@ -114,10 +113,21 @@ create table if not exists public.project_tasks (
 alter table public.projects add column if not exists is_demo boolean not null default false;
 alter table public.project_tasks add column if not exists is_demo boolean not null default false;
 
+-- Notes rapides synchronisées entre les appareils de l'utilisateur.
+create table if not exists public.quick_notes (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references auth.users(id) on delete cascade,
+  title text not null default '' check (char_length(title) <= 120),
+  body text not null check (char_length(trim(body)) > 0 and octet_length(body) <= 40000),
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+
 -- Empêche de rattacher un objet, une tâche ou un historique à un autre compte.
 create unique index if not exists locations_owner_id_uidx on public.locations(user_id, id);
 create unique index if not exists items_owner_id_uidx on public.items(user_id, id);
 create unique index if not exists projects_owner_id_uidx on public.projects(user_id, id);
+create unique index if not exists quick_notes_owner_id_uidx on public.quick_notes(user_id, id);
 alter table public.items drop constraint if exists items_location_id_fkey;
 alter table public.items drop constraint if exists items_location_owner_fkey;
 alter table public.items add constraint items_location_owner_fkey
@@ -158,16 +168,19 @@ drop trigger if exists trg_items_touch on public.items;
 create trigger trg_items_touch before update on public.items for each row execute function public.touch_updated_at();
 drop trigger if exists trg_projects_touch on public.projects;
 create trigger trg_projects_touch before update on public.projects for each row execute function public.touch_updated_at();
+drop trigger if exists trg_quick_notes_touch on public.quick_notes;
+create trigger trg_quick_notes_touch before update on public.quick_notes for each row execute function public.touch_updated_at();
 
 -- L'API Data ne reçoit aucun droit anonyme ; l'utilisateur connecté reste limité par RLS.
-revoke all on table public.locations, public.items, public.maintenance_logs, public.moves, public.projects, public.project_tasks from anon, public;
-grant select, insert, update, delete on table public.locations, public.items, public.maintenance_logs, public.moves, public.projects, public.project_tasks to authenticated;
+revoke all on table public.locations, public.items, public.maintenance_logs, public.moves, public.projects, public.project_tasks, public.quick_notes from anon, public, authenticated;
+grant select, insert, update, delete on table public.locations, public.items, public.maintenance_logs, public.moves, public.projects, public.project_tasks, public.quick_notes to authenticated;
 alter table public.locations enable row level security;
 alter table public.items enable row level security;
 alter table public.maintenance_logs enable row level security;
 alter table public.moves enable row level security;
 alter table public.projects enable row level security;
 alter table public.project_tasks enable row level security;
+alter table public.quick_notes enable row level security;
 
 drop policy if exists own_all on public.locations;
 create policy own_all on public.locations for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
@@ -181,13 +194,15 @@ drop policy if exists own_all on public.projects;
 create policy own_all on public.projects for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 drop policy if exists own_all on public.project_tasks;
 create policy own_all on public.project_tasks for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
+drop policy if exists own_all on public.quick_notes;
+create policy own_all on public.quick_notes for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
 -- Synchronisation instantanée entre appareils ; RLS s'applique aussi aux événements Realtime.
 do $$
 declare table_name text;
 begin
   if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
-    foreach table_name in array array['locations','items','maintenance_logs','moves','projects','project_tasks'] loop
+    foreach table_name in array array['locations','items','maintenance_logs','moves','projects','project_tasks','quick_notes'] loop
       if not exists (
         select 1 from pg_publication_tables
         where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = table_name

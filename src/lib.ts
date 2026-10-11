@@ -77,7 +77,7 @@ export interface Item {
   threshold: number | null; locationId: string | null
   notes: string; details: Record<string, string>
   price: number | null; boughtAt: string | null
-  unit: string; warranty: number | null // unité de quantité ; garantie en mois
+  unit: string
   updatedAt: string; isDemo?: boolean
 }
 export interface Log { id: string; itemId: string; date: string; action: string; note: string; reminder?: string | null; repeat: string; isDemo?: boolean }
@@ -112,13 +112,9 @@ export function addMonthsISO(date10: string, months: number): string {
 }
 export const isLowStock = (i: Item) =>
   i.isConsumable && i.quantity != null && i.threshold != null && i.quantity <= i.threshold
-export function warrantyUntil(i: Item): string | null {
-  if (!i.boughtAt || i.warranty == null) return null
-  return addMonthsISO(i.boughtAt, i.warranty)
-}
 
 // ---- Compteurs d'alertes partagés (badge onglet + page Alertes) ----
-export interface AlertCounts { courses: number; reminders: number; redo: number; lateMoves: number; warranties: number; total: number }
+export interface AlertCounts { courses: number; reminders: number; redo: number; lateMoves: number; total: number }
 export function countAlerts(
   d: { items: Item[]; logs: Log[]; moves: Move[]; tasks: Task[]; projects: Project[] },
   horizon = 14,
@@ -138,9 +134,7 @@ export function countAlerts(
   const reminders = d.logs.filter((l) => l.reminder && l.reminder <= inH).length
   const redo = d.logs.filter((l) => l.repeat && addMonthsISO(l.date, parseInt(l.repeat) || 0) <= inH).length
   const lateMoves = d.moves.filter((l) => !l.returned && l.due && l.due < t).length
-  const in60 = plusDays(60)
-  const warranties = d.items.filter((i) => { const u = warrantyUntil(i); return u != null && u <= in60 }).length
-  return { courses, reminders, redo, lateMoves, warranties, total: courses + reminders + redo + lateMoves + warranties }
+  return { courses, reminders, redo, lateMoves, total: courses + reminders + redo + lateMoves }
 }
 
 // ---- Préférences (personnalisation, par appareil, incluses dans l'export) ----
@@ -212,6 +206,9 @@ export interface Task {
   id: string; projectId: string; label: string; done: boolean
   qty: number | null; unit: string; itemId: string | null
   createdAt: string; isDemo?: boolean
+}
+export interface QuickNote {
+  id: string; title: string; body: string; createdAt: string; updatedAt: string
 }
 export const projectProgress = (tasks: Task[]) =>
   tasks.length === 0 ? 0 : Math.round((tasks.filter((t) => t.done).length / tasks.length) * 100)

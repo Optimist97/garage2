@@ -1,9 +1,9 @@
 // Store unique : localStorage par défaut, Supabase si configuré (sync simple).
 import React, { createContext, useContext, useEffect, useMemo, useRef, useState } from 'react'
-import { DEFAULT_PREFS, sanitizePrefs, supa, useSupabase, type Item, type Location, type Log, type Move, type MoveKind, type Prefs, type Project, type Task, uid } from './lib'
+import { DEFAULT_PREFS, sanitizePrefs, supa, useSupabase, type Item, type Location, type Log, type Move, type MoveKind, type Prefs, type Project, type QuickNote, type Task, uid } from './lib'
 
 export interface Toast { id: string; msg: string; actionLabel?: string; onAction?: () => void }
-interface Data { items: Item[]; locations: Location[]; logs: Log[]; moves: Move[]; projects: Project[]; tasks: Task[]; prefs: Prefs }
+interface Data { items: Item[]; locations: Location[]; logs: Log[]; moves: Move[]; projects: Project[]; tasks: Task[]; quickNotes: QuickNote[]; prefs: Prefs }
 interface Store extends Data {
   ready: boolean; authReady: boolean; needsPasswordReset: boolean; syncing: boolean; syncError: string | null; userEmail: string | null; cloud: boolean
   toast: Toast | null; showToast: (msg: string, undo?: () => void) => void
@@ -15,6 +15,7 @@ interface Store extends Data {
   addTask: (t: Task) => void; updateTask: (id: string, patch: Partial<Task>) => void; toggleTask: (id: string) => void; removeTask: (id: string) => void
   consumeTaskMaterial: (taskId: string) => void
   createProjectWithTasks: (p: Project, tasks: Task[]) => void
+  addQuickNote: (n: QuickNote) => void; updateQuickNote: (id: string, patch: Partial<QuickNote>) => void; removeQuickNote: (id: string) => void
   seedDemoData: () => Promise<void>; demoCount: number
   updatePrefs: (patch: Partial<Prefs>) => void
   replaceAll: (d: Data) => void
@@ -25,7 +26,7 @@ const Ctx = createContext<Store | null>(null)
 export const useStore = () => useContext(Ctx) as Store
 
 const KEY = 'garage2-data-v1'
-const emptyData = (): Data => ({ items: [], locations: [], logs: [], moves: [], projects: [], tasks: [], prefs: { ...DEFAULT_PREFS } })
+const emptyData = (): Data => ({ items: [], locations: [], logs: [], moves: [], projects: [], tasks: [], quickNotes: [], prefs: { ...DEFAULT_PREFS } })
 function load(): Data {
   try {
     const raw = localStorage.getItem(KEY)
@@ -53,14 +54,14 @@ export function migrate(raw: Record<string, unknown>): Data {
     locations: asArr<Location>(data.locations).map((l) => ({ ...l, id: locationIds.get(l.id)!, isDemo: Boolean(l.isDemo) || ((l.zone === 'Établi' && ['Étagère A', 'Bac 3'].includes(l.label)) || (l.zone === 'Fond' && l.label === 'Rack voile')) })),
     items: asArr<Item>(data.items).map((i) => {
       const p = i as Partial<Item>
+      const cleanItem = Object.fromEntries(Object.entries(i).filter(([key]) => key !== 'warranty')) as Item
       return {
-        ...i,
+        ...cleanItem,
         id: itemIds.get(i.id)!,
         locationId: i.locationId ? locationIds.get(i.locationId) ?? (isUuid(i.locationId) ? i.locationId : null) : null,
         price: p.price ?? null,
         boughtAt: p.boughtAt ?? null,
         unit: p.unit ?? '',
-        warranty: p.warranty ?? null,
         isDemo: Boolean(p.isDemo) || i.name === 'Dégraissant atelier 5 L' || i.name === 'Aile kite 9 m²',
       }
     }),
@@ -84,6 +85,7 @@ export function migrate(raw: Record<string, unknown>): Data {
       itemId: t.itemId ? (itemIds.get(t.itemId) ?? (isUuid(t.itemId) ? t.itemId : null)) : null,
       isDemo: Boolean(t.isDemo),
     })),
+    quickNotes: asArr<QuickNote>(data.quickNotes).filter((n) => n && typeof n.body === 'string').map((n) => ({ ...n, id: isUuid(n.id) ? n.id : uid(), title: String(n.title ?? ''), body: n.body, createdAt: n.createdAt ?? new Date().toISOString(), updatedAt: n.updatedAt ?? n.createdAt ?? new Date().toISOString() })),
     prefs: sanitizePrefs(data.prefs),
   }
 }
@@ -129,7 +131,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
             if (channel) void c.removeChannel(channel)
             channelUserId = session.user.id
             channel = c.channel(`garage2:${session.user.id}`)
-            for (const table of ['locations', 'items', 'maintenance_logs', 'moves', 'projects', 'project_tasks']) {
+            for (const table of ['locations', 'items', 'maintenance_logs', 'moves', 'projects', 'project_tasks', 'quick_notes']) {
               channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
                 if (refreshTimer) window.clearTimeout(refreshTimer)
                 refreshTimer = window.setTimeout(() => { if (alive) void pull(session.user.id) }, 180)
@@ -179,12 +181,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (left.length) localStorage.setItem(queueKey, JSON.stringify(left))
       else localStorage.removeItem(queueKey)
 
-      const [it, lo, lg, mv, pr, ta] = await Promise.all([
+      const [it, lo, lg, mv, pr, ta, qn] = await Promise.all([
       c.from('items').select('*'), c.from('locations').select('*'),
       c.from('maintenance_logs').select('*'), c.from('moves').select('*'),
       c.from('projects').select('*'), c.from('project_tasks').select('*'),
+      c.from('quick_notes').select('*'),
       ])
-      const results = [it, lo, lg, mv, pr, ta]
+      const results = [it, lo, lg, mv, pr, ta, qn]
       const failed = results.find((r) => r.error)
       if (failed?.error) throw failed.error
       const remote = {
@@ -194,12 +197,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         moves: (mv.data ?? []).map((r: Record<string, never>) => toMove(r as never)),
         projects: (pr.data ?? []).map((r: Record<string, never>) => ({ id: String(r['id']), title: String(r['title']), status: String(r['status']) as Project['status'], notes: String(r['notes'] ?? ''), budget: (r['budget'] as number) ?? null, targetDate: (r['target_date'] as string) ?? null, createdAt: String(r['created_at']), updatedAt: String(r['updated_at'] ?? r['created_at']), isDemo: Boolean(r['is_demo']) })),
         tasks: (ta.data ?? []).map((r: Record<string, never>) => ({ id: String(r['id']), projectId: String(r['project_id']), label: String(r['label']), done: Boolean(r['done']), qty: (r['qty'] as number) ?? null, unit: String(r['unit'] ?? ''), itemId: (r['item_id'] as string) ?? null, createdAt: String(r['created_at']), isDemo: Boolean(r['is_demo']) })),
+        quickNotes: (qn.data ?? []).map((r: Record<string, never>) => ({ id: String(r['id']), title: String(r['title'] ?? ''), body: String(r['body']), createdAt: String(r['created_at']), updatedAt: String(r['updated_at']) })),
       }
       const remoteCount = Object.values(remote).reduce((sum, rows) => sum + rows.length, 0)
       const local = dataRef.current
       const linkedKey = `${KEY}-cloud-linked-${session.user.id}`
       const firstLink = localStorage.getItem(linkedKey) !== '1'
-      const localCount = local.items.length + local.locations.length + local.logs.length + local.moves.length + local.projects.length + local.tasks.length
+      const localCount = local.items.length + local.locations.length + local.logs.length + local.moves.length + local.projects.length + local.tasks.length + local.quickNotes.length
       if (remoteCount === 0 && localCount > 0 && firstLink) {
         // First device: preserve the existing local inventory when connecting an empty cloud.
         const batches: [string, Record<string, unknown>[]][] = [
@@ -209,6 +213,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           ['maintenance_logs', local.logs.map(toLogRow)],
           ['moves', local.moves.map(toMoveRow)],
           ['project_tasks', local.tasks.map(toTaskRow)],
+          ['quick_notes', local.quickNotes.map(toQuickNoteRow)],
         ]
         for (const [table, rows] of batches) {
           if (!rows.length) continue
@@ -220,7 +225,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       } else if (firstLink && localCount > 0) {
         // Premier appareil connecté à un garage déjà créé : conserve aussi les données locales distinctes.
         const merge = <T extends { id: string }>(cloudRows: T[], localRows: T[]) => [...cloudRows, ...localRows.filter((r) => !cloudRows.some((cRow) => cRow.id === r.id))]
-        const combined = { ...remote, locations: merge(remote.locations, local.locations), items: merge(remote.items, local.items), logs: merge(remote.logs, local.logs), moves: merge(remote.moves, local.moves), projects: merge(remote.projects, local.projects), tasks: merge(remote.tasks, local.tasks) }
+        const combined = { ...remote, locations: merge(remote.locations, local.locations), items: merge(remote.items, local.items), logs: merge(remote.logs, local.logs), moves: merge(remote.moves, local.moves), projects: merge(remote.projects, local.projects), tasks: merge(remote.tasks, local.tasks), quickNotes: merge(remote.quickNotes, local.quickNotes) }
         const newOnly = {
           locations: combined.locations.filter((r) => !remote.locations.some((x) => x.id === r.id)),
           items: combined.items.filter((r) => !remote.items.some((x) => x.id === r.id)),
@@ -228,11 +233,13 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
           moves: combined.moves.filter((r) => !remote.moves.some((x) => x.id === r.id)),
           projects: combined.projects.filter((r) => !remote.projects.some((x) => x.id === r.id)),
           tasks: combined.tasks.filter((r) => !remote.tasks.some((x) => x.id === r.id)),
+          quickNotes: combined.quickNotes.filter((r) => !remote.quickNotes.some((x) => x.id === r.id)),
         }
         const batches: [string, Record<string, unknown>[]][] = [
           ['locations', newOnly.locations.map((r) => ({ id: r.id, zone: r.zone, label: r.label, is_demo: Boolean(r.isDemo) }))],
           ['items', newOnly.items.map(toRow)], ['projects', newOnly.projects.map(toProjectRow)], ['maintenance_logs', newOnly.logs.map(toLogRow)],
           ['moves', newOnly.moves.map(toMoveRow)], ['project_tasks', newOnly.tasks.map(toTaskRow)],
+          ['quick_notes', newOnly.quickNotes.map(toQuickNoteRow)],
         ]
         for (const [table, rows] of batches) {
           if (!rows.length) continue
@@ -257,8 +264,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     } finally { setSyncing(false); setReady(true) }
   }
 
-  function toItem(r: { id: string; name: string; category: string; condition: string; quantity: number | null; is_consumable: boolean; threshold: number | null; location_id: string | null; notes: string; details: Record<string, string>; updated_at: string; price?: number | null; bought_at?: string | null; unit?: string; warranty_months?: number | null; is_demo?: boolean }): Item {
-    return { id: r.id, name: r.name, category: r.category as Item['category'], condition: r.condition as Item['condition'], quantity: r.quantity, isConsumable: r.is_consumable, threshold: r.threshold, locationId: r.location_id, notes: r.notes ?? '', details: r.details ?? {}, price: r.price ?? null, boughtAt: r.bought_at ?? null, unit: r.unit ?? '', warranty: r.warranty_months ?? null, updatedAt: r.updated_at, isDemo: Boolean(r.is_demo) }
+  function toItem(r: { id: string; name: string; category: string; condition: string; quantity: number | null; is_consumable: boolean; threshold: number | null; location_id: string | null; notes: string; details: Record<string, string>; updated_at: string; price?: number | null; bought_at?: string | null; unit?: string; is_demo?: boolean }): Item {
+    return { id: r.id, name: r.name, category: r.category as Item['category'], condition: r.condition as Item['condition'], quantity: r.quantity, isConsumable: r.is_consumable, threshold: r.threshold, locationId: r.location_id, notes: r.notes ?? '', details: r.details ?? {}, price: r.price ?? null, boughtAt: r.bought_at ?? null, unit: r.unit ?? '', updatedAt: r.updated_at, isDemo: Boolean(r.is_demo) }
   }
   async function push(table: string, op: 'upsert' | 'delete', row?: Record<string, unknown>, id?: string) {
     const c = supa(); if (!c) return
@@ -284,7 +291,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setSyncError('Synchronisation interrompue : les changements sont gardés sur cet appareil et seront réessayés.')
     }
   }
-  const toRow = (i: Item) => ({ id: i.id, name: i.name, category: i.category, condition: i.condition, quantity: i.quantity, is_consumable: i.isConsumable, threshold: i.threshold, location_id: i.locationId, notes: i.notes, details: i.details, price: i.price, bought_at: i.boughtAt, unit: i.unit, warranty_months: i.warranty, is_demo: Boolean(i.isDemo) })
+  const toRow = (i: Item) => ({ id: i.id, name: i.name, category: i.category, condition: i.condition, quantity: i.quantity, is_consumable: i.isConsumable, threshold: i.threshold, location_id: i.locationId, notes: i.notes, details: i.details, price: i.price, bought_at: i.boughtAt, unit: i.unit, is_demo: Boolean(i.isDemo) })
   const toMove = (r: { id: string; item_id: string; to_who: string; since: string; returned: boolean; note: string; due?: string | null; kind?: string; is_demo?: boolean }): Move => ({
     id: String(r.id), itemId: String(r.item_id), toWho: String(r.to_who), since: String(r.since),
     returned: Boolean(r.returned), note: String(r.note ?? ''), due: (r.due as string) ?? null,
@@ -293,6 +300,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
   const toMoveRow = (m: Move) => ({ id: m.id, item_id: m.itemId, to_who: m.toWho, since: m.since, returned: m.returned, note: m.note, due: m.due, kind: m.kind, is_demo: Boolean(m.isDemo) })
   const toProjectRow = (p: Project) => ({ id: p.id, title: p.title, status: p.status, notes: p.notes, budget: p.budget, target_date: p.targetDate, is_demo: Boolean(p.isDemo) })
   const toTaskRow = (t: Task) => ({ id: t.id, project_id: t.projectId, label: t.label, done: t.done, qty: t.qty, unit: t.unit, item_id: t.itemId, is_demo: Boolean(t.isDemo) })
+  const toQuickNoteRow = (n: QuickNote) => ({ id: n.id, title: n.title, body: n.body, created_at: n.createdAt, updated_at: n.updatedAt })
   const toLogRow = (l: Log) => ({ id: l.id, item_id: l.itemId, date: l.date, action: l.action, note: l.note, reminder_date: l.reminder, repeat: l.repeat, is_demo: Boolean(l.isDemo) })
 
   const showToast = (msg: string, undo?: () => void) =>
@@ -307,6 +315,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     moves: data.prefs.showDemoData ? data.moves : data.moves.filter((x) => !x.isDemo),
     projects: data.prefs.showDemoData ? data.projects : data.projects.filter((x) => !x.isDemo),
     tasks: data.prefs.showDemoData ? data.tasks : data.tasks.filter((x) => !x.isDemo),
+    quickNotes: data.quickNotes,
     demoCount,
     createProjectWithTasks: (p, newTasks) => {
       setData((d) => ({ ...d, projects: [p, ...d.projects], tasks: [...d.tasks, ...newTasks] }))
@@ -320,9 +329,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
         { id: uid(), zone: 'Atelier démo', label: 'Étagère A', isDemo: true },
       ]
       const items: Item[] = [
-        { id: uid(), name: 'Perceuse-visseuse (démo)', category: 'outils', condition: 'bon', quantity: 1, isConsumable: false, threshold: null, locationId: locations[0].id, notes: 'Objet fictif pour tester la fiche et les déplacements.', details: { marque: 'Atelier Exemple', reference: 'DEMO-18V' }, price: 89, boughtAt: null, unit: '', warranty: null, updatedAt: now, isDemo: true },
-        { id: uid(), name: 'Vis à bois 5 × 50 mm (démo)', category: 'outils', condition: 'bon', quantity: 12, isConsumable: true, threshold: 20, locationId: locations[1].id, notes: 'Stock fictif bas pour essayer les alertes et matériaux.', details: { marque: 'Exemple' }, price: null, boughtAt: null, unit: 'pièces', warranty: null, updatedAt: now, isDemo: true },
-        { id: uid(), name: 'Vélo de randonnée (démo)', category: 'velo', condition: 'moyen', quantity: 1, isConsumable: false, threshold: null, locationId: null, notes: 'Vélo fictif avec rappel d’entretien.', details: { taille: 'M', reference: 'BIKE-01' }, price: 240, boughtAt: null, unit: '', warranty: null, updatedAt: now, isDemo: true },
+        { id: uid(), name: 'Perceuse-visseuse (démo)', category: 'outils', condition: 'bon', quantity: 1, isConsumable: false, threshold: null, locationId: locations[0].id, notes: 'Objet fictif pour tester la fiche et les déplacements.', details: { marque: 'Atelier Exemple', reference: 'DEMO-18V' }, price: 89, boughtAt: null, unit: '', updatedAt: now, isDemo: true },
+        { id: uid(), name: 'Vis à bois 5 × 50 mm (démo)', category: 'outils', condition: 'bon', quantity: 12, isConsumable: true, threshold: 20, locationId: locations[1].id, notes: 'Stock fictif bas pour essayer les alertes et matériaux.', details: { marque: 'Exemple' }, price: null, boughtAt: null, unit: 'pièces', updatedAt: now, isDemo: true },
+        { id: uid(), name: 'Vélo de randonnée (démo)', category: 'velo', condition: 'moyen', quantity: 1, isConsumable: false, threshold: null, locationId: null, notes: 'Vélo fictif avec rappel d’entretien.', details: { taille: 'M', reference: 'BIKE-01' }, price: 240, boughtAt: null, unit: '', updatedAt: now, isDemo: true },
       ]
       const projects: Project[] = [{ id: uid(), title: 'Étagère de rangement (démo)', status: 'encours', notes: 'Projet fictif pour tester tâches, budget et progression.', budget: 75, targetDate: null, createdAt: now, updatedAt: now, isDemo: true }]
       const tasks: Task[] = [
@@ -369,7 +378,12 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       setData((d) => { next = d.logs.find((x) => x.id === id); const logs = d.logs.map((x) => x.id === id ? { ...x, ...patch } : x); return { ...d, logs } })
       if (next) { const m = { ...next, ...patch } as Log; push('maintenance_logs', 'upsert', toLogRow(m)) }
     },
-    removeLog: (id) => { setData((d) => ({ ...d, logs: d.logs.filter((x) => x.id !== id) })); push('maintenance_logs', 'delete', undefined, id) },
+    removeLog: (id) => {
+      const log = data.logs.find((x) => x.id === id)
+      setData((d) => ({ ...d, logs: d.logs.filter((x) => x.id !== id) }))
+      push('maintenance_logs', 'delete', undefined, id)
+      if (log) showToast('Alerte retirée', () => { setData((d) => ({ ...d, logs: [log, ...d.logs] })); push('maintenance_logs', 'upsert', toLogRow(log)) })
+    },
     addMove: (m) => { setData((d) => ({ ...d, moves: [m, ...d.moves] })); push('moves', 'upsert', toMoveRow(m)) },
     toggleMoveReturned: (id) => {
       const l = data.moves.find((x) => x.id === id); if (!l) return
@@ -403,6 +417,18 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       push('project_tasks', 'upsert', toTaskRow(next))
     },
     removeTask: (id) => { setData((d) => ({ ...d, tasks: d.tasks.filter((x) => x.id !== id) })); push('project_tasks', 'delete', undefined, id) },
+    addQuickNote: (note) => { setData((d) => ({ ...d, quickNotes: [note, ...d.quickNotes] })); push('quick_notes', 'upsert', toQuickNoteRow(note)) },
+    updateQuickNote: (id, patch) => {
+      let next: QuickNote | undefined
+      setData((d) => { next = d.quickNotes.find((n) => n.id === id); const quickNotes = d.quickNotes.map((n) => n.id === id ? { ...n, ...patch, updatedAt: new Date().toISOString() } : n); return { ...d, quickNotes } })
+      if (next) push('quick_notes', 'upsert', toQuickNoteRow({ ...next, ...patch, updatedAt: new Date().toISOString() }))
+    },
+    removeQuickNote: (id) => {
+      const note = data.quickNotes.find((n) => n.id === id)
+      setData((d) => ({ ...d, quickNotes: d.quickNotes.filter((n) => n.id !== id) }))
+      push('quick_notes', 'delete', undefined, id)
+      if (note) showToast('Note supprimée', () => { setData((d) => ({ ...d, quickNotes: [note, ...d.quickNotes] })); push('quick_notes', 'upsert', toQuickNoteRow(note)) })
+    },
     consumeTaskMaterial: (taskId) => {
       const t = data.tasks.find((x) => x.id === taskId)
       const item = t?.itemId ? data.items.find((x) => x.id === t.itemId) : undefined
