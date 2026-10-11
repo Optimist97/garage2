@@ -6,7 +6,7 @@ Application personnelle en français pour inventaire de garage et projets DIY. I
 
 - `npm ci`, `npm run dev`, `npm run build`, `npm run preview`.
 - Sans variables `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY`, l’application fonctionne en local avec `localStorage` (`garage2-data-v1`).
-- Avec ces variables, l’page dédiée `#/connexion` utilise Supabase Auth mot de passe avec réinitialisation e-mail; Réglages permet de modifier le mot de passe ou de demander un lien. Aucun formulaire d’inscription publique. Les données cloud sont isolées par `auth.uid()` et RLS.
+- Avec ces variables, l’page dédiée `#/connexion` utilise Supabase Auth mot de passe sur `#/connexion` avec réinitialisation e-mail; Réglages permet de modifier le mot de passe (vérification de l’ancien) ou de demander un lien de récupération. Aucun formulaire d’inscription publique. Les données cloud sont isolées par `auth.uid()` et RLS.
 - Le dépôt public GitHub Pages ne doit contenir que le client Supabase public (anon/publishable). Jamais de `service_role`, clé secrète, mot de passe, fichier `.env` ou export utilisateur. `.gitignore` protège `.env*` sauf `.env.example`.
 
 ## Carte du code
