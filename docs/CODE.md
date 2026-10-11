@@ -31,7 +31,7 @@ La bibliothèque de 9 modèles est intégrée dans `src/projectTemplates.ts`, sa
 - `src/lib.ts` : catégories, propriétés de fiche, `Item/Location/Log/Move/Project/Task`, alertes, préférences, formats, Supabase lazy.
 - `src/store.tsx` : API métier unique, migration des anciennes données, état session, sync cloud, opérations CRUD et file de reprise réseau. Toute colonne ajoutée exige mapping dans les deux sens ici.
 - `src/projectTemplates.ts` : données éditoriales de la bibliothèque.
-- `src/App.tsx` : routes et interfaces; écran de connexion par mot de passe et récupération du mot de passe; réglages, démo et modèles.
+- `src/App.tsx` : routes et interfaces; page de connexion dédiée (`#/connexion`), envoi du lien de réinitialisation et formulaire de mise à jour; Réglages, démo et modèles.
 - `src/components.tsx` / `src/index.css` : modales, primitives, focus, tailles tactiles et responsive.
 - `supabase/schema.sql` : SQL réexécutable pour le schéma, migrations, contraintes, indexes, RLS/grants.
 - `.github/workflows/deploy.yml` : construit `dist/`, ajoute le fallback Pages et déploie.
@@ -48,6 +48,6 @@ La bibliothèque de 9 modèles est intégrée dans `src/projectTemplates.ts`, sa
 
 Le dépôt et le bundle GitHub Pages sont publics. Toute variable `VITE_*` est visible côté navigateur : seules l’URL du projet et la clé anon/publishable sont admissibles, jamais `service_role`, secret key, mot de passe ni fichier `.env`. Les tables refusent les requêtes anonymes et appliquent RLS `auth.uid() = user_id`; `authenticated` ne reçoit que `SELECT`, `INSERT`, `UPDATE`, `DELETE` (sans `TRUNCATE`, `TRIGGER` ni `REFERENCES`). Les liens inter-tables utilisent des FK composées sur `user_id`. Les anciens champs `photo_url` éventuels sont conservés en base comme historique inerte, mais ne sont plus lus ni écrits par l’application. La fonction photo et les contrôles de capture/import sont supprimés.
 
-Configurer `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` comme GitHub Actions Secrets pour l’organisation/dépôt `Optimist97/garage2`, pas dans le code. Autoriser `https://optimist97.github.io/garage2/` dans Auth URL Configuration. Maintenir l’inscription publique désactivée; créer le compte propriétaire depuis le dashboard et saisir son mot de passe directement dans l’interface Supabase.
+Configurer `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY` comme GitHub Actions Secrets pour l’organisation/dépôt `Optimist97/garage2`, pas dans le code. Autoriser `https://optimist97.github.io/garage2/` dans Auth URL Configuration. Maintenir l’inscription publique désactivée; le compte propriétaire est créé depuis le dashboard Supabase. La page `#/connexion` utilise `signInWithPassword`; le lien de réinitialisation redirige vers l’application et le changement depuis Réglages vérifie d’abord le mot de passe actuel. Configurer le fournisseur e-mail et l’URL de redirection Supabase pour Pages.
 
 Contrôle de livraison : `npm run build`; rechercher les clés `service_role`/secret et données privées dans les fichiers et artefacts publics; vérifier le résultat GitHub Actions et Pages; connexion/connexion erronée/réinitialisation, CRUD, synchro second appareil et reprise réseau; comparer les données avant/après migration et vérifier RLS et intégrité relationnelle.

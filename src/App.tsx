@@ -1,5 +1,5 @@
 import React, { useMemo, useState } from 'react'
-import { HashRouter, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
+import { HashRouter, NavLink, Navigate, Route, Routes, useLocation, useNavigate, useParams } from 'react-router-dom'
 import { StoreProvider, useStore } from './store'
 import { PROJECT_TEMPLATES, type ProjectTemplate } from './projectTemplates'
 import {
@@ -1009,9 +1009,10 @@ function SettingsPage() {
             <div className="flex flex-wrap items-center gap-2 text-sm"><span className="min-w-0 flex-1 truncate">Connecté : {s.userEmail}</span>
               <button className={btnGhost} onClick={() => s.signOut()}>Déconnexion</button></div>
             <p className="text-xs text-neutral-500">Les changements sont partagés avec vos autres appareils connectés au même compte.</p>
+            <PasswordManager />
             <p role="status" className={`text-xs ${s.syncError ? 'text-red-700 dark:text-red-300' : 'text-neutral-500'}`}>{s.syncError ?? (s.syncing ? 'Synchronisation en cours…' : 'Synchronisé')}</p>
           </div>
-        ) : <p className="text-sm text-neutral-500">Connectez-vous depuis l’écran de connexion pour activer la synchronisation.</p>}
+        ) : <p className="text-sm text-neutral-500">Connectez-vous depuis la page de connexion pour activer la synchronisation.</p>}
         {msg && <p role="status" className="mt-2 text-sm">{msg}</p>}
       </section>
     </div>
@@ -1021,12 +1022,13 @@ function SettingsPage() {
 /* ================= App ================= */
 function Shell() {
   const store = useStore()
+  const location = useLocation()
   const [addOpen, setAddOpen] = useState(false)
   if (store.cloud && store.needsPasswordReset) return <PasswordResetScreen />
   if (store.cloud && (!store.authReady || (store.userEmail && !store.ready))) {
     return <div className="grid min-h-screen place-items-center px-6"><div className="text-center"><Logo size="lg" /><p className="mt-4 text-sm text-neutral-500">{store.syncing ? 'Synchronisation de votre garage…' : 'Vérification de la session…'}</p></div></div>
   }
-  if (store.cloud && !store.userEmail) return <LoginScreen />
+  if (store.cloud && !store.userEmail) return location.pathname === '/connexion' ? <LoginScreen /> : <Navigate to="/connexion" replace state={{ from: location.pathname + location.search }} />
   return (
     <Layout onAdd={() => setAddOpen(true)}>
       <Routes>
@@ -1037,6 +1039,7 @@ function Shell() {
         <Route path="/alertes" element={<AlertsPage />} />
         <Route path="/deplaces" element={<MovesPage />} />
         <Route path="/reglages" element={<SettingsPage />} />
+        <Route path="/connexion" element={<Navigate to="/" replace />} />
         <Route path="*" element={<Empty title="Page introuvable" hint="Retournez à la liste." action={<a className={btnPrimary} href="#/">Objets</a>} />} />
       </Routes>
       {addOpen && <QuickAddModal onClose={() => setAddOpen(false)} />}
@@ -1071,12 +1074,48 @@ function LoginScreen() {
           {!resetMode && <Field label="Mot de passe"><div className="relative"><input type={showPassword ? 'text' : 'password'} required autoComplete="current-password" value={password} onChange={(e) => setPassword(e.target.value)} className={`${inputCls} pr-20`} /><button type="button" className="absolute inset-y-0 right-2 my-1 rounded-lg px-2 text-xs font-semibold text-neutral-600 dark:text-neutral-300" onClick={() => setShowPassword((v) => !v)} aria-label={showPassword ? 'Masquer le mot de passe' : 'Afficher le mot de passe'}>{showPassword ? 'Masquer' : 'Afficher'}</button></div></Field>}
           <button className={`${btnPrimary} w-full`} disabled={busy || !email || (!resetMode && !password)}>{busy ? 'Veuillez patienter…' : resetMode ? 'Envoyer le lien' : 'Se connecter'}</button>
         </form>
-        <button type="button" className="mt-4 w-full rounded-lg py-2 text-sm font-medium text-neutral-600 underline decoration-neutral-300 underline-offset-4 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white" onClick={() => { setResetMode((v) => !v); setMsg('') }}>{resetMode ? 'Retour à la connexion' : 'Mot de passe oublié ?'}</button>
+        <button type="button" className="mt-4 w-full rounded-lg py-2 text-sm font-medium text-neutral-600 underline decoration-neutral-300 underline-offset-4 hover:text-neutral-900 dark:text-neutral-400 dark:hover:text-white" onClick={() => { setResetMode((v) => !v); setMsg('') }}>{resetMode ? 'Retour à la connexion' : 'Recevoir un lien par e-mail'}</button>
         {msg && <p role="status" className="mt-4 rounded-xl bg-neutral-100 px-3 py-2 text-sm dark:bg-neutral-800">{msg}</p>}
         <p className="mt-7 border-t border-neutral-200 pt-4 text-xs leading-5 text-neutral-500 dark:border-neutral-800">Les inscriptions sont réservées au propriétaire du garage. Votre mot de passe n’est jamais enregistré par l’application.</p>
       </section>
     </main>
   )
+}
+
+function PasswordManager() {
+  const s = useStore()
+  const [current, setCurrent] = useState('')
+  const [next, setNext] = useState('')
+  const [confirm, setConfirm] = useState('')
+  const [busy, setBusy] = useState(false)
+  const [msg, setMsg] = useState('')
+  const [resetSent, setResetSent] = useState(false)
+  async function change(e: React.FormEvent) {
+    e.preventDefault()
+    if (next !== confirm) { setMsg('Les deux nouveaux mots de passe ne correspondent pas.'); return }
+    setBusy(true)
+    setMsg(await s.changePassword(current, next))
+    setBusy(false)
+    setCurrent(''); setNext(''); setConfirm('')
+  }
+  async function sendReset() {
+    if (!s.userEmail) return
+    setBusy(true)
+    setMsg(await s.resetPassword(s.userEmail))
+    setBusy(false)
+    setResetSent(true)
+  }
+  return <div className="space-y-3 border-t border-neutral-200 pt-3 dark:border-neutral-800">
+    <h3 className="font-semibold">Gestion du mot de passe</h3>
+    <form className="space-y-3" onSubmit={change}>
+      <Field label="Mot de passe actuel"><input type="password" autoComplete="current-password" required value={current} onChange={(e) => setCurrent(e.target.value)} className={inputCls} /></Field>
+      <Field label="Nouveau mot de passe"><input type="password" autoComplete="new-password" minLength={10} required value={next} onChange={(e) => setNext(e.target.value)} className={inputCls} /></Field>
+      <Field label="Confirmer le nouveau mot de passe"><input type="password" autoComplete="new-password" minLength={10} required value={confirm} onChange={(e) => setConfirm(e.target.value)} className={inputCls} /></Field>
+      <button className={btnPrimary} disabled={busy || next.length < 10 || confirm.length < 10}>{busy ? 'Veuillez patienter…' : 'Modifier le mot de passe'}</button>
+    </form>
+    <button type="button" className={btnGhost} disabled={busy || resetSent} onClick={() => void sendReset()}>{resetSent ? 'Lien envoyé' : 'Envoyer un lien de réinitialisation'}</button>
+    {msg && <p role="status" className="text-sm">{msg}</p>}
+  </div>
 }
 
 function PasswordResetScreen() {

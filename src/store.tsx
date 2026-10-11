@@ -18,7 +18,7 @@ interface Store extends Data {
   seedDemoData: () => Promise<void>; demoCount: number
   updatePrefs: (patch: Partial<Prefs>) => void
   replaceAll: (d: Data) => void
-  signIn: (email: string, password: string) => Promise<string>; resetPassword: (email: string) => Promise<string>; updatePassword: (password: string) => Promise<string>; signOut: () => Promise<void>
+  signIn: (email: string, password: string) => Promise<string>; resetPassword: (email: string) => Promise<string>; updatePassword: (password: string) => Promise<string>; changePassword: (current: string, next: string) => Promise<string>; signOut: () => Promise<void>
 }
 
 const Ctx = createContext<Store | null>(null)
@@ -432,6 +432,15 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (error) return 'Impossible d’enregistrer le mot de passe. Le lien est peut-être expiré.'
       setNeedsPasswordReset(false)
       return 'Mot de passe mis à jour.'
+    },
+    changePassword: async (current, next) => {
+      const c = supa(); if (!c) return 'La gestion du mot de passe est indisponible en mode local.'
+      const { data: { user } } = await c.auth.getUser()
+      if (!user?.email) return 'Session expirée. Reconnectez-vous.'
+      const { error: verifyError } = await c.auth.signInWithPassword({ email: user.email, password: current })
+      if (verifyError) return 'Le mot de passe actuel est incorrect.'
+      const { error } = await c.auth.updateUser({ password: next })
+      return error ? 'Impossible de mettre à jour le mot de passe.' : 'Mot de passe mis à jour.'
     },
     signOut: async () => { await supa()?.auth.signOut(); localStorage.removeItem(KEY); setData(emptyData()); setUserEmail(null) },
     // eslint-disable-next-line react-hooks/exhaustive-deps
