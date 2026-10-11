@@ -13,7 +13,7 @@ Application personnelle en français pour inventaire de garage et projets DIY. I
 
 - `src/main.tsx` : mount React, CSS, Service Worker en production.
 - `src/lib.ts` : types métier, 10 catégories, champs spécifiques dans `Item.details` JSON, dates/alertes, préférences, client Supabase lazy.
-- `src/store.tsx` : store global et seul point d’accès aux données (`useStore()`), migrations localStorage/import, CRUD, correspondance camelCase ↔ colonnes SQL, authentification, synchronisation cloud, file locale des écritures hors ligne, jeux de démonstration.
+- `src/store.tsx` : store global et seul point d’accès aux données (`useStore()`), migrations localStorage/import, CRUD, correspondance camelCase ↔ colonnes SQL, authentification, synchronisation cloud Realtime + reprise au focus, file locale des écritures hors ligne, jeux de démonstration.
 - `src/projectTemplates.ts` : banque statique de modèles FR (aménagement, rénovation, entretien, loisirs nautiques, réparation). Un modèle crée un projet et ses étapes dans les tables utilisateur ordinaires ; les modèles n’ont pas de données distantes séparées.
 - `src/App.tsx` : navigation et écrans inventaire, objet, alertes, déplacements, projets, détails de projet, bibliothèque de modèles, réglages, connexion/mot de passe oublié.
 - `src/components.tsx` : primitives accessibles partagées (Modal, Field, Empty, Skeleton, badges, toasts, boutons).

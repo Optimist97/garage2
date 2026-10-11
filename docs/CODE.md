@@ -18,7 +18,7 @@ components.tsx : primitives UI accessibles partagées
 
 ## Données et synchronisation
 
-Les six ensembles synchronisés sont `locations`, `items`, `maintenance_logs`, `moves`, `projects`, `project_tasks`. Chaque ligne cloud inclut `user_id`; RLS autorise uniquement le compte connecté. La première connexion fusionne les lignes locales manquantes et préserve les valeurs cloud pour les mêmes UUID. Un marqueur par utilisateur évite qu’un vieux cache recrée plus tard des données supprimées. Les écritures échouées sont placées dans une file par compte et retentées à la prochaine synchronisation. Au changement de session, le store recharge les données cloud. Les préférences d’affichage, y compris la visibilité démo, restent propres à chaque appareil.
+Les six ensembles synchronisés sont `locations`, `items`, `maintenance_logs`, `moves`, `projects`, `project_tasks`. Chaque ligne cloud inclut `user_id`; RLS autorise uniquement le compte connecté. La première connexion fusionne les lignes locales manquantes et préserve les valeurs cloud pour les mêmes UUID. Un marqueur par utilisateur évite qu’un vieux cache recrée plus tard des données supprimées. Les six tables sont incluses dans `supabase_realtime`; un événement autorisé lance un `pull()` groupé avec debounce. Le focus/retour de visibilité déclenche également une reprise. Les écritures échouées sont placées dans une file par compte et retentées à la prochaine synchronisation. Au changement de session, le store recharge les données cloud. Les préférences d’affichage, y compris la visibilité démo, restent propres à chaque appareil.
 
 ## Démonstration et modèles
 

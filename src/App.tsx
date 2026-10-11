@@ -578,6 +578,7 @@ function ProjectModal({ onClose, project, template }: { onClose: () => void; pro
 }
 
 function TemplateBank({ onClose, onSelect }: { onClose: () => void; onSelect: (template: ProjectTemplate) => void }) {
+  const { prefs } = useStore()
   const groups = [...new Set(PROJECT_TEMPLATES.map((t) => t.group))]
   const [group, setGroup] = useState('Tous')
   const templates = PROJECT_TEMPLATES.filter((t) => group === 'Tous' || t.group === group)
@@ -585,7 +586,7 @@ function TemplateBank({ onClose, onSelect }: { onClose: () => void; onSelect: (t
     <p className="mb-3 text-sm text-neutral-500">Choisissez une base ; le projet et ses étapes seront enregistrés dans votre garage et modifiables ensuite.</p>
     <div className="mb-3 flex gap-2 overflow-x-auto pb-1">{['Tous', ...groups].map((g) => <button key={g} className={`${btnGhost} shrink-0 ${group === g ? 'ring-2 ring-[var(--accent)]' : ''}`} onClick={() => setGroup(g)}>{g}</button>)}</div>
     <ul className="space-y-2">{templates.map((t) => <li key={t.id} className="rounded-2xl bg-neutral-100 p-3 dark:bg-neutral-800">
-      <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t.group}</span><h3 className="font-semibold">{t.title}</h3><p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">{t.summary}</p><p className="mt-2 text-xs text-neutral-500">{t.tasks.length} étapes{t.budget != null ? ` · Budget indicatif ${fmtPrice(t.budget, 'EUR')}` : ''}</p></div><button className={btnPrimary} onClick={() => onSelect(t)}>Utiliser</button></div>
+      <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t.group}</span><h3 className="font-semibold">{t.title}</h3><p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">{t.summary}</p><p className="mt-2 text-xs text-neutral-500">{t.tasks.length} étapes{t.budget != null ? ` · Budget indicatif ${fmtPrice(t.budget, prefs.currency)}` : ''}</p></div><button className={btnPrimary} onClick={() => onSelect(t)}>Utiliser</button></div>
     </li>)}</ul>
   </Modal>
 }

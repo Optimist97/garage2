@@ -182,5 +182,21 @@ create policy own_all on public.projects for all to authenticated using ((select
 drop policy if exists own_all on public.project_tasks;
 create policy own_all on public.project_tasks for all to authenticated using ((select auth.uid()) = user_id) with check ((select auth.uid()) = user_id);
 
+-- Synchronisation instantanée entre appareils ; RLS s'applique aussi aux événements Realtime.
+do $$
+declare table_name text;
+begin
+  if exists (select 1 from pg_publication where pubname = 'supabase_realtime') then
+    foreach table_name in array array['locations','items','maintenance_logs','moves','projects','project_tasks'] loop
+      if not exists (
+        select 1 from pg_publication_tables
+        where pubname = 'supabase_realtime' and schemaname = 'public' and tablename = table_name
+      ) then
+        execute format('alter publication supabase_realtime add table public.%I', table_name);
+      end if;
+    end loop;
+  end if;
+end $$;
+
 -- Les anciens champs de photo restent inertes pour ne pas casser une migration de schéma existante.
 -- Le client n'envoie plus de fichiers et n'utilise pas Supabase Storage.

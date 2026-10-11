@@ -50,7 +50,7 @@ export function migrate(raw: Record<string, unknown>): Data {
   const projectIds = new Map(asArr<Project>(data.projects).map((p) => [p.id, isUuid(p.id) ? p.id : uid()]))
   const kinds: MoveKind[] = ['pret', 'ailleurs', 'reparation']
   return {
-    locations: asArr<Location>(data.locations).map((l) => ({ ...l, id: locationIds.get(l.id)!, isDemo: Boolean(l.isDemo) })),
+    locations: asArr<Location>(data.locations).map((l) => ({ ...l, id: locationIds.get(l.id)!, isDemo: Boolean(l.isDemo) || ((l.zone === 'Établi' && ['Étagère A', 'Bac 3'].includes(l.label)) || (l.zone === 'Fond' && l.label === 'Rack voile')) })),
     items: asArr<Item>(data.items).map((i) => {
       const p = i as Partial<Item>
       return {
@@ -61,7 +61,7 @@ export function migrate(raw: Record<string, unknown>): Data {
         boughtAt: p.boughtAt ?? null,
         unit: p.unit ?? '',
         warranty: p.warranty ?? null,
-        isDemo: Boolean(p.isDemo),
+        isDemo: Boolean(p.isDemo) || i.name === 'Dégraissant atelier 5 L' || i.name === 'Aile kite 9 m²',
       }
     }),
     logs: asArr<Log>(data.logs).filter((l) => itemIds.has(l.itemId) || isUuid(l.itemId)).map((l) => ({
@@ -77,7 +77,7 @@ export function migrate(raw: Record<string, unknown>): Data {
         isDemo: Boolean(p.isDemo),
       }
     }),
-    projects: asArr<Project>(data.projects).map((p) => ({ ...p, id: projectIds.get(p.id) ?? p.id, isDemo: Boolean(p.isDemo) })),
+    projects: asArr<Project>(data.projects).map((p) => ({ ...p, id: projectIds.get(p.id) ?? p.id, isDemo: Boolean(p.isDemo) || p.title === 'Rénover l’établi' })),
     tasks: asArr<Task>(data.tasks).filter((t) => projectIds.has(t.projectId) || isUuid(t.projectId)).map((t) => ({
       ...t,
       projectId: projectIds.get(t.projectId) ?? t.projectId,
@@ -106,6 +106,9 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     const c = supa()
     if (!c) { setAuthReady(true); setReady(true); return }
     let alive = true
+    let channel: ReturnType<typeof c.channel> | null = null
+    let channelUserId: string | null = null
+    let refreshTimer: number | undefined
     const { data: { subscription } } = c.auth.onAuthStateChange((event, session) => {
       if (!alive) return
       setUserEmail(session?.user.email ?? null)
@@ -113,12 +116,31 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       if (event === 'PASSWORD_RECOVERY') setNeedsPasswordReset(true)
       else if (event === 'SIGNED_IN' || event === 'SIGNED_OUT') setNeedsPasswordReset(false)
       if (event === 'SIGNED_OUT') {
+        if (channel) { void c.removeChannel(channel); channel = null; channelUserId = null }
+        if (refreshTimer) window.clearTimeout(refreshTimer)
         setData(emptyData())
         setReady(true)
         setSyncing(false)
       } else if (session && (event === 'INITIAL_SESSION' || event === 'SIGNED_IN' || event === 'TOKEN_REFRESHED')) {
-        // Don't call Supabase again inside its auth callback.
-        Promise.resolve().then(() => pull(session.user.id)).finally(() => { if (alive) setReady(true) })
+        // Hors du callback Auth : évite une ré-entrée dans le client Supabase.
+        Promise.resolve().then(async () => {
+          if (!alive) return
+          if (channelUserId !== session.user.id) {
+            if (channel) void c.removeChannel(channel)
+            channelUserId = session.user.id
+            channel = c.channel(`garage2:${session.user.id}`)
+            for (const table of ['locations', 'items', 'maintenance_logs', 'moves', 'projects', 'project_tasks']) {
+              channel.on('postgres_changes', { event: '*', schema: 'public', table }, () => {
+                if (refreshTimer) window.clearTimeout(refreshTimer)
+                refreshTimer = window.setTimeout(() => { if (alive) void pull(session.user.id) }, 180)
+              })
+            }
+            channel.subscribe((status) => {
+              if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') setSyncError('Canal temps réel indisponible ; la synchronisation reprendra au retour sur l’application.')
+            })
+          }
+          await pull(session.user.id)
+        }).finally(() => { if (alive) setReady(true) })
       } else if (!session) setReady(true)
     })
     const onFocus = () => { if (document.visibilityState === 'visible') void pull() }
@@ -127,6 +149,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     return () => {
       alive = false
       subscription.unsubscribe()
+      if (channel) void c.removeChannel(channel)
+      if (refreshTimer) window.clearTimeout(refreshTimer)
       window.removeEventListener('focus', onFocus)
       document.removeEventListener('visibilitychange', onFocus)
     }
