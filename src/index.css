@@ -1,0 +1,29 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+html, body, #root { height: 100%; }
+body {
+  @apply bg-neutral-100 text-neutral-900 dark:bg-neutral-950 dark:text-neutral-100;
+  font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  overscroll-behavior-y: none;
+}
+/* Hauteur mobile réelle + safe areas */
+.app-shell { min-height: 100dvh; padding-bottom: env(safe-area-inset-bottom); }
+.touch-target { min-height: 44px; min-width: 44px; }
+.img-fixed { aspect-ratio: 4 / 3; object-fit: cover; }
+.no-x { overflow-x: hidden; }
+.truncate-2 {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+}
+/* Bottom sheet : poignée + animation sobre */
+@keyframes sheet-up { from { transform: translateY(24px); opacity: .6; } to { transform: none; opacity: 1; } }
+@keyframes fade-in { from { opacity: 0; } to { opacity: 1; } }
+.sheet-anim { animation: sheet-up 160ms ease-out; }
+.fade-anim { animation: fade-in 140ms ease-out; }
+@media (prefers-reduced-motion: reduce) {
+  .sheet-anim, .fade-anim { animation: none; }
+  * { transition: none !important; }
+}
+input, select, textarea { font-size: 16px; } /* évite le zoom iOS */
+:focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
