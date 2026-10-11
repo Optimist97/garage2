@@ -176,7 +176,7 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
       const linkedKey = `${KEY}-cloud-linked-${session.user.id}`
       const firstLink = localStorage.getItem(linkedKey) !== '1'
       const localCount = local.items.length + local.locations.length + local.logs.length + local.moves.length + local.projects.length + local.tasks.length
-      if (remoteCount === 0 && localCount > 0) {
+      if (remoteCount === 0 && localCount > 0 && firstLink) {
         // First device: preserve the existing local inventory when connecting an empty cloud.
         const batches: [string, Record<string, unknown>[]][] = [
           ['locations', local.locations.map((r) => ({ ...r }))],

@@ -1,6 +1,3 @@
-Warning: truncated output (original token count: 18503)
-Total output lines: 1116
-
 import React, { useMemo, useState } from 'react'
 import { HashRouter, NavLink, Route, Routes, useNavigate, useParams } from 'react-router-dom'
 import { StoreProvider, useStore } from './store'
@@ -328,7 +325,518 @@ function LogModal({ itemId, onClose }: { itemId: string; onClose: () => void }) 
             </select>
           </Field>
         </div>
-        <button className={`${btnPrimary} w-full`} disabled={!action.trim()}>Enregistrer</butto…8503 tokens truncated…unded-2xl bg-white dark:bg-neutral-900 p-3 text-sm shadow-sm">
+        <button className={`${btnPrimary} w-full`} disabled={!action.trim()}>Enregistrer</button>
+      </form>
+    </Modal>
+  )
+}
+
+function MoveModal({ itemId, onClose }: { itemId: string; onClose: () => void }) {
+  const { addMove, showToast } = useStore()
+  const [toWho, setToWho] = useState('')
+  const [due, setDue] = useState('')
+  const [kind, setKind] = useState<MoveKind>('pret')
+  const destLabel = kind === 'pret' ? 'Prêté à *' : kind === 'reparation' ? 'Réparateur *' : 'Où *'
+  const destPh = kind === 'pret' ? 'Ex. Karim' : kind === 'reparation' ? 'Ex. Atelier vélo du centre' : 'Ex. Coffre voiture, cave…'
+  return (
+    <Modal title="Déplacer cet objet" onClose={onClose}>
+      <form className="space-y-3" onSubmit={(e) => { e.preventDefault(); if (!toWho.trim()) return; addMove({ id: uid(), itemId, toWho: toWho.trim(), since: today(), returned: false, note: '', due: due || null, kind }); showToast('Déplacement enregistré'); onClose() }}>
+        <Field label="Motif *">
+          <select value={kind} onChange={(e) => setKind(e.target.value as MoveKind)} className={inputCls}>
+            {MOVE_KINDS.map((k) => <option key={k.id} value={k.id}>{k.label}</option>)}
+          </select>
+        </Field>
+        <Field label={destLabel}><input required value={toWho} onChange={(e) => setToWho(e.target.value)} placeholder={destPh} className={inputCls} /></Field>
+        <Field label="Retour prévu (optionnel)"><input type="date" value={due} onChange={(e) => setDue(e.target.value)} className={inputCls} /></Field>
+        <button className={`${btnPrimary} w-full`} disabled={!toWho.trim()}>Enregistrer</button>
+      </form>
+    </Modal>
+  )
+}
+
+/* Lier un objet à un projet (tâche matériau) */
+function ItemToProjectModal({ itemId, onClose }: { itemId: string; onClose: () => void }) {
+  const { items, projects, addTask, showToast } = useStore()
+  const nav = useNavigate()
+  const [projectId, setProjectId] = useState(projects.find((p) => p.status !== 'termine')?.id ?? '')
+  const [qty, setQty] = useState('1')
+  const item = items.find((x) => x.id === itemId)
+  if (!item) return null
+  return (
+    <Modal title="Utiliser dans un projet" onClose={onClose}>
+      {projects.length === 0 ? (
+        <Empty title="Aucun projet" hint="Créez d’abord un projet depuis l’onglet Projets." />
+      ) : (
+        <form className="space-y-3" onSubmit={(e) => {
+          e.preventDefault(); if (!projectId) return
+          addTask({ id: uid(), projectId, label: item.name, done: false, qty: parseInt(qty) || 1, unit: '', itemId, createdAt: new Date().toISOString() })
+          showToast('Matériau ajouté au projet'); onClose(); nav(`/projet/${projectId}`)
+        }}>
+          <Field label="Projet *">
+            <select value={projectId} onChange={(e) => setProjectId(e.target.value)} className={inputCls} required>
+              <option value="">— Choisir —</option>
+              {projects.map((p) => <option key={p.id} value={p.id}>{p.title} ({statusLabel(p.status)})</option>)}
+            </select>
+          </Field>
+          <Field label="Quantité"><input inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} className={inputCls} /></Field>
+          <button className={`${btnPrimary} w-full`} disabled={!projectId}>Ajouter</button>
+        </form>
+      )}
+    </Modal>
+  )
+}
+
+/* ================= Ajout rapide : nom + catégorie suffisent ================= */
+export function QuickAddModal({ onClose, presetCat }: { onClose: () => void; presetCat?: string }) {
+  const { addItem, locations, prefs, showToast } = useStore()
+  const nav = useNavigate()
+  const [name, setName] = useState('')
+  const [category, setCategory] = useState(presetCat ?? prefs.defaultCategory)
+  const [condition, setCondition] = useState<Condition>('bon')
+  const [locationId, setLocationId] = useState('')
+  const [qty, setQty] = useState('1')
+  const [isConsumable, setIsConsumable] = useState(false)
+  const [threshold, setThreshold] = useState('2')
+  const [notes, setNotes] = useState('')
+  const [details, setDetails] = useState<Record<string, string>>({})
+  const [price, setPrice] = useState('')
+  const [boughtAt, setBoughtAt] = useState('')
+  const [unit, setUnit] = useState('')
+  const [warranty, setWarranty] = useState('')
+
+  const fields = CATEGORY_FIELDS[category] ?? []
+
+  function save() {
+    const id = uid()
+    const item: Item = {
+      id, name: name.trim(), category: category as Item['category'],
+      condition, quantity: isConsumable ? (parseInt(qty) || 0) : null,
+      isConsumable, threshold: isConsumable ? (parseInt(threshold) || 0) : null,
+      locationId: locationId || null, notes: notes.trim(),
+      details: Object.fromEntries(Object.entries(details).filter(([, v]) => v.trim())),
+      price: price.trim() ? parseFloat(price.replace(',', '.')) || null : null,
+      boughtAt: boughtAt || null,
+      unit: isConsumable ? unit.trim() : '',
+      warranty: warranty.trim() ? parseInt(warranty) || null : null,
+      updatedAt: new Date().toISOString(),
+    }
+    addItem(item)
+    showToast('Objet ajouté')
+    onClose()
+    nav(`/objet/${id}`)
+  }
+
+  return (
+    <Modal title="Ajout rapide" onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="Nom *"><input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Ex. Clé Allen 5" className={inputCls} /></Field>
+        <Field label="Catégorie *">
+          <select value={category} onChange={(e) => { setCategory(e.target.value); setDetails({}) }} className={inputCls}>
+            {CATEGORIES.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+          </select>
+        </Field>
+        <details className="rounded-xl bg-neutral-100 dark:bg-neutral-800 px-3 py-2">
+          <summary className="touch-target cursor-pointer font-medium">Options (état, lieu, stock…)</summary>
+          <div className="space-y-3 py-3">
+            <div className="grid grid-cols-2 gap-2">
+              <Field label="État">
+                <select value={condition} onChange={(e) => setCondition(e.target.value as Condition)} className={inputCls}>
+                  {CONDITIONS.map((c) => <option key={c.id} value={c.id}>{c.label}</option>)}
+                </select>
+              </Field>
+              <Field label="Emplacement">
+                <select value={locationId} onChange={(e) => setLocationId(e.target.value)} className={inputCls}>
+                  <option value="">—</option>
+                  {locations.map((l) => <option key={l.id} value={l.id}>{locationLabel(l)}</option>)}
+                </select>
+              </Field>
+            </div>
+            <label className="flex touch-target items-center gap-2 text-sm font-medium">
+              <input type="checkbox" checked={isConsumable} onChange={(e) => setIsConsumable(e.target.checked)} className="h-5 w-5" /> Consommable (gère un stock)
+            </label>
+            {isConsumable && (
+              <>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Quantité"><input inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} className={inputCls} /></Field>
+                  <Field label="Unité"><input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="L, pcs…" className={inputCls} /></Field>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <Field label="Seuil d'alerte"><input inputMode="numeric" value={threshold} onChange={(e) => setThreshold(e.target.value)} className={inputCls} /></Field>
+                  <Field label="Garantie (mois)"><input inputMode="numeric" value={warranty} onChange={(e) => setWarranty(e.target.value)} placeholder="Ex. 24" className={inputCls} /></Field>
+                </div>
+              </>
+            )}
+            {!isConsumable && (
+              <Field label="Garantie (mois)"><input inputMode="numeric" value={warranty} onChange={(e) => setWarranty(e.target.value)} placeholder="Ex. 24" className={inputCls} /></Field>
+            )}
+            {fields.map((f) => (
+              <Field key={f.key} label={f.label}>
+                <input value={details[f.key] ?? ''} onChange={(e) => setDetails((d) => ({ ...d, [f.key]: e.target.value }))} placeholder={f.placeholder} className={inputCls} />
+              </Field>
+            ))}
+            <div className="grid grid-cols-2 gap-2">
+              <Field label={`Prix (${currencySymbol(prefs.currency)})`}><input inputMode="decimal" value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Ex. 24,90" className={inputCls} /></Field>
+              <Field label="Acheté le"><input type="date" value={boughtAt} onChange={(e) => setBoughtAt(e.target.value)} className={inputCls} /></Field>
+            </div>
+            <Field label="Notes"><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} className={inputCls} /></Field>
+          </div>
+        </details>
+        <button className={`${btnPrimary} w-full`} disabled={!name.trim()} onClick={save}>Ajouter</button>
+      </div>
+    </Modal>
+  )
+}
+
+/* ================= Projets DIY : liste ================= */
+function ProjectsPage() {
+  const { projects, tasks, ready } = useStore()
+  const nav = useNavigate()
+  const [filter, setFilter] = useState('tous')
+  const [open, setOpen] = useState(false)
+  const [templatesOpen, setTemplatesOpen] = useState(false)
+  const [template, setTemplate] = useState<ProjectTemplate | undefined>()
+
+  const filtered = projects.filter((p) => filter === 'tous' || p.status === filter)
+  const active = projects.filter((p) => p.status === 'encours').length
+  if (!ready) return <Skeleton />
+
+  return (
+    <div className="mx-auto w-full max-w-2xl">
+      <div className="mb-3 flex items-center justify-between gap-2">
+        <h2 className="font-bold">Projets {active > 0 && <span className="text-sm font-normal text-neutral-500">({active} en cours)</span>}</h2>
+        <div className="flex gap-2"><button className={btnGhost} onClick={() => setTemplatesOpen(true)}>Modèles</button><button className={btnPrimary} onClick={() => { setTemplate(undefined); setOpen(true) }}>+ Projet</button></div>
+      </div>
+      <div className="mb-3 flex gap-2 overflow-x-auto pb-1" role="group" aria-label="Filtrer par statut">
+        {[{ id: 'tous', label: 'Tous' }, ...PROJECT_STATUS].map((s) => (
+          <button key={s.id} onClick={() => setFilter(s.id)}
+            className={`touch-target shrink-0 rounded-full px-3 text-sm font-medium ${filter === s.id ? 'bg-neutral-900 text-white dark:bg-white dark:text-neutral-900' : 'bg-neutral-200 dark:bg-neutral-800'}`}>{s.label}</button>
+        ))}
+      </div>
+      {filtered.length === 0 ? (
+        <Empty title={projects.length === 0 ? 'Aucun projet' : 'Aucun projet ici'} hint="Créez un projet ou partez d’un modèle avec une liste d’étapes prête à adapter." action={projects.length === 0 ? <div className="flex justify-center gap-2"><button className={btnGhost} onClick={() => setTemplatesOpen(true)}>Voir les modèles</button><button className={btnPrimary} onClick={() => { setTemplate(undefined); setOpen(true) }}>Créer mon projet</button></div> : undefined} />
+      ) : (
+        <ul className="space-y-2">
+          {filtered.map((p) => {
+            const pt = tasks.filter((t) => t.projectId === p.id)
+            const pct = projectProgress(pt)
+            return (
+              <li key={p.id}>
+                <button onClick={() => nav(`/projet/${p.id}`)} className="w-full rounded-2xl bg-white dark:bg-neutral-900 p-3 text-left shadow-sm active:scale-[0.99]">
+                  <span className="flex items-center gap-2">
+                    <span className="min-w-0 flex-1 truncate font-semibold" title={p.title}>{p.title}</span>
+                    <StatusBadge s={p.status} label={statusLabel(p.status)} />
+                  </span>
+                  <span className="mt-2 flex items-center gap-2">
+                    <span className="flex-1"><Progress pct={pct} /></span>
+                    <span className="shrink-0 text-xs text-neutral-500">{pt.filter((t) => t.done).length}/{pt.length}{p.targetDate ? ` · ${fmtDate(p.targetDate)}` : ''}</span>
+                  </span>
+                </button>
+              </li>
+            )
+          })}
+        </ul>
+      )}
+      {open && <ProjectModal template={template} onClose={() => setOpen(false)} />}
+      {templatesOpen && <TemplateBank onClose={() => setTemplatesOpen(false)} onSelect={(t) => { setTemplatesOpen(false); setTemplate(t); setOpen(true) }} />}
+    </div>
+  )
+}
+
+/* Modale création / édition de projet */
+function ProjectModal({ onClose, project, template }: { onClose: () => void; project?: Project; template?: ProjectTemplate }) {
+  const { addProject, updateProject, createProjectWithTasks, prefs, showToast } = useStore()
+  const nav = useNavigate()
+  const [title, setTitle] = useState(project?.title ?? template?.title ?? '')
+  const [status, setStatus] = useState<ProjectStatus>(project?.status ?? prefs.defaultProjectStatus)
+  const [notes, setNotes] = useState(project?.notes ?? template?.notes ?? '')
+  const [budget, setBudget] = useState(project?.budget != null ? String(project.budget) : template?.budget != null ? String(template.budget) : '')
+  const [targetDate, setTargetDate] = useState(project?.targetDate ?? '')
+  return (
+    <Modal title={project ? 'Modifier le projet' : 'Nouveau projet'} onClose={onClose}>
+      <div className="space-y-3">
+        <Field label="Titre *"><input autoFocus value={title} onChange={(e) => setTitle(e.target.value)} placeholder="Ex. Repeindre les volets" className={inputCls} /></Field>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label="Statut">
+            <select value={status} onChange={(e) => setStatus(e.target.value as ProjectStatus)} className={inputCls}>
+              {PROJECT_STATUS.map((s) => <option key={s.id} value={s.id}>{s.label}</option>)}
+            </select>
+          </Field>
+          <Field label="Échéance"><input type="date" value={targetDate} onChange={(e) => setTargetDate(e.target.value)} className={inputCls} /></Field>
+        </div>
+        <div className="grid grid-cols-2 gap-2">
+          <Field label={`Budget estimé (${currencySymbol(prefs.currency)})`}><input inputMode="decimal" value={budget} onChange={(e) => setBudget(e.target.value)} placeholder="Ex. 120" className={inputCls} /></Field>
+        </div>
+        <Field label="Notes"><textarea value={notes} onChange={(e) => setNotes(e.target.value)} rows={2} placeholder="Étapes, mesures, idées…" className={inputCls} /></Field>
+        <button className={`${btnPrimary} w-full`} disabled={!title.trim()} onClick={() => {
+          if (project) { updateProject(project.id, { title: title.trim(), status, notes: notes.trim(), budget: budget.trim() ? parseFloat(budget.replace(',', '.')) || null : null, targetDate: targetDate || null }) ; showToast('Projet mis à jour') }
+          else { const id = uid(); const now = new Date().toISOString(); const p = { id, title: title.trim(), status, notes: notes.trim(), budget: budget.trim() ? parseFloat(budget.replace(',', '.')) || null : null, targetDate: targetDate || null, createdAt: now, updatedAt: now }; if (template) createProjectWithTasks(p, template.tasks.map((t) => ({ id: uid(), projectId: id, label: t.label, done: false, qty: t.qty ?? null, unit: t.unit ?? '', itemId: null, createdAt: now }))); else addProject(p); showToast(template ? `Projet créé avec ${template.tasks.length} étapes` : 'Projet créé'); onClose(); nav(`/projet/${id}`); return }
+          onClose()
+        }}>{project ? 'Enregistrer' : 'Créer'}</button>
+      </div>
+    </Modal>
+  )
+}
+
+function TemplateBank({ onClose, onSelect }: { onClose: () => void; onSelect: (template: ProjectTemplate) => void }) {
+  const groups = [...new Set(PROJECT_TEMPLATES.map((t) => t.group))]
+  const [group, setGroup] = useState('Tous')
+  const templates = PROJECT_TEMPLATES.filter((t) => group === 'Tous' || t.group === group)
+  return <Modal title="Bibliothèque de projets" onClose={onClose}>
+    <p className="mb-3 text-sm text-neutral-500">Choisissez une base ; le projet et ses étapes seront enregistrés dans votre garage et modifiables ensuite.</p>
+    <div className="mb-3 flex gap-2 overflow-x-auto pb-1">{['Tous', ...groups].map((g) => <button key={g} className={`${btnGhost} shrink-0 ${group === g ? 'ring-2 ring-[var(--accent)]' : ''}`} onClick={() => setGroup(g)}>{g}</button>)}</div>
+    <ul className="space-y-2">{templates.map((t) => <li key={t.id} className="rounded-2xl bg-neutral-100 p-3 dark:bg-neutral-800">
+      <div className="flex items-start gap-3"><div className="min-w-0 flex-1"><span className="text-xs font-semibold uppercase tracking-wide text-neutral-500">{t.group}</span><h3 className="font-semibold">{t.title}</h3><p className="mt-1 text-sm text-neutral-600 dark:text-neutral-300">{t.summary}</p><p className="mt-2 text-xs text-neutral-500">{t.tasks.length} étapes{t.budget != null ? ` · Budget indicatif ${fmtPrice(t.budget, 'EUR')}` : ''}</p></div><button className={btnPrimary} onClick={() => onSelect(t)}>Utiliser</button></div>
+    </li>)}</ul>
+  </Modal>
+}
+
+/* ================= Projet DIY : fiche + tâches ================= */
+function ProjectDetailPage() {
+  const { id } = useParams()
+  const { projects, tasks, items, prefs, addProject, addTask, toggleTask, removeTask, removeProject, consumeTaskMaterial, showToast } = useStore()
+  const nav = useNavigate()
+  const p = projects.find((x) => x.id === id)
+  const [editOpen, setEditOpen] = useState(false)
+  const [confirmDel, setConfirmDel] = useState(false)
+  const [label, setLabel] = useState('')
+  const [qty, setQty] = useState('')
+  const [unit, setUnit] = useState('')
+  const [linkItem, setLinkItem] = useState('')
+  if (!p) return <Empty title="Projet introuvable" hint="Il a peut-être été supprimé." action={<button className={btnGhost} onClick={() => nav('/projets')}>Retour</button>} />
+  const pt = tasks.filter((t) => t.projectId === p.id)
+  const done = pt.filter((t) => t.done)
+  const todo = pt.filter((t) => !t.done)
+  const pct = projectProgress(pt)
+  const itemOf = (itemId: string | null) => itemId ? items.find((x) => x.id === itemId) : undefined
+
+  const taskRow = (t: (typeof pt)[number]) => {
+    const linked = itemOf(t.itemId)
+    const low = linked?.isConsumable && linked.quantity != null && linked.threshold != null && linked.quantity <= (linked.threshold + (t.qty ?? 0))
+    return (
+      <li key={t.id} className="flex items-center gap-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 px-2 py-1.5">
+        <button role="checkbox" aria-checked={t.done} aria-label={t.done ? `Rouvrir : ${t.label}` : `Terminer : ${t.label}`}
+          onClick={() => toggleTask(t.id)}
+          className={`touch-target flex h-7 w-7 shrink-0 items-center justify-center rounded-lg border-2 text-base ${t.done ? 'border-green-600 bg-green-600 text-white' : 'border-neutral-400 dark:border-neutral-500'}`}>{t.done ? '✓' : ''}</button>
+        <div className="min-w-0 flex-1">
+          <p className={`truncate text-sm font-medium ${t.done ? 'line-through text-neutral-500' : ''}`} title={t.label}>{t.label}</p>
+          <p className="truncate text-xs text-neutral-500">
+            {[t.qty != null ? `×${t.qty}${t.unit ? ' ' + t.unit : ''}` : '', linked ? `stock : ${linked.quantity ?? '—'}` : ''].filter(Boolean).join(' · ') || '—'}
+            {linked && <> · <button className="underline" onClick={() => nav(`/objet/${linked.id}`)}>{linked.name}</button></>}
+          </p>
+        </div>
+        {linked?.isConsumable && !t.done && (
+          <button className={`${btnGhost} shrink-0 px-2 py-1 text-xs`} title="Déduire du stock" onClick={() => consumeTaskMaterial(t.id)}>Retirer du stock</button>
+        )}
+        {low && !t.done && <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">Stock bas</span>}
+        <button aria-label={`Supprimer : ${t.label}`} className="shrink-0 rounded px-2 text-lg leading-none" onClick={() => removeTask(t.id)}>×</button>
+      </li>
+    )
+  }
+
+  return (
+    <div className="mx-auto w-full max-w-2xl">
+      <button onClick={() => nav('/projets')} className={`${btnGhost} mb-3`}>← Projets</button>
+      <article className="overflow-hidden rounded-2xl bg-white dark:bg-neutral-900 shadow-sm">
+        <div className="space-y-3 p-4">
+          <div className="flex items-start gap-2">
+            <h2 className="min-w-0 flex-1 break-words text-xl font-bold" title={p.title}>{p.title}</h2>
+            <StatusBadge s={p.status} label={statusLabel(p.status)} />
+          </div>
+          <div className="flex items-center gap-2 text-sm text-neutral-500">
+            <span className="flex-1"><Progress pct={pct} /></span>
+            <span className="shrink-0">{done.length}/{pt.length}{p.budget != null ? ` · ~${fmtPrice(p.budget, prefs.currency)}` : ''}{p.targetDate ? ` · ${fmtDate(p.targetDate)}` : ''}</span>
+          </div>
+          {p.notes && <p className="whitespace-pre-wrap break-words text-sm">{p.notes}</p>}
+          <div className="flex flex-wrap gap-2">
+            <button className={btnGhost} onClick={() => setEditOpen(true)}>Modifier</button>
+            <button className={btnGhost} onClick={() => {
+              const id = uid(); const now = new Date().toISOString()
+              addProject({ ...p, id, title: `${p.title} (copie)`, status: 'idee', createdAt: now, updatedAt: now })
+              pt.forEach((x) => addTask({ ...x, id: uid(), projectId: id, done: false, createdAt: now }))
+              showToast('Projet dupliqué'); nav(`/projet/${id}`)
+            }}>Dupliquer</button>
+            <button className={btnGhost} onClick={() => setConfirmDel(true)}>Supprimer</button>
+          </div>
+          <section aria-label="Tâches et matériaux">
+            <h3 className="mb-2 mt-2 font-semibold">À faire ({todo.length})</h3>
+            {todo.length === 0 && done.length === 0
+              ? <p className="text-sm text-neutral-500">Ajoutez la première étape ou le premier matériau ci-dessous.</p>
+              : <ul className="space-y-1.5">{todo.map(taskRow)}</ul>}
+            {done.length > 0 && (
+              <><h3 className="mb-2 mt-4 font-semibold">Terminé ({done.length})</h3>
+              <ul className="space-y-1.5">{done.map(taskRow)}</ul></>
+            )}
+            <form className="mt-3 space-y-2 rounded-xl bg-neutral-100 dark:bg-neutral-800 p-3" onSubmit={(e) => {
+              e.preventDefault(); if (!label.trim()) return
+              addTask({ id: uid(), projectId: p.id, label: label.trim(), done: false, qty: qty.trim() ? parseInt(qty) || null : null, unit: unit.trim(), itemId: linkItem || null, createdAt: new Date().toISOString() })
+              setLabel(''); setQty(''); setUnit(''); setLinkItem(''); showToast('Tâche ajoutée')
+            }}>
+              <Field label="Nouvelle étape / matériau *"><input value={label} onChange={(e) => setLabel(e.target.value)} placeholder="Ex. Poncer le plateau, acheter lasure…" className={inputCls} /></Field>
+              <div className="grid grid-cols-3 gap-2">
+                <Field label="Qté"><input inputMode="numeric" value={qty} onChange={(e) => setQty(e.target.value)} placeholder="2" className={inputCls} /></Field>
+                <Field label="Unité"><input value={unit} onChange={(e) => setUnit(e.target.value)} placeholder="L, kg…" className={inputCls} /></Field>
+                <Field label="Objet du garage">
+                  <select value={linkItem} onChange={(e) => setLinkItem(e.target.value)} className={inputCls} aria-label="Lier à un objet du garage">
+                    <option value="">—</option>
+                    {items.map((i) => <option key={i.id} value={i.id}>{i.name}</option>)}
+                  </select>
+                </Field>
+              </div>
+              <button className={`${btnPrimary} w-full`} disabled={!label.trim()}>Ajouter</button>
+            </form>
+          </section>
+        </div>
+      </article>
+      {editOpen && <ProjectModal project={p} onClose={() => setEditOpen(false)} />}
+      {confirmDel && (
+        <Modal title="Supprimer ce projet ?" onClose={() => setConfirmDel(false)}>
+          <p className="text-sm">« {p.title} » et ses {pt.length} tâche{pt.length > 1 ? 's' : ''} seront supprimés. Le stock du garage est conservé.</p>
+          <div className="mt-4 flex gap-2">
+            <button className={btnGhost} onClick={() => setConfirmDel(false)}>Garder</button>
+            <button className="touch-target rounded-xl bg-red-600 px-4 font-semibold text-white" onClick={() => { removeProject(p.id); nav('/projets') }}>Supprimer</button>
+          </div>
+        </Modal>
+      )}
+    </div>
+  )
+}
+
+/* ================= Alertes : à racheter + rappels ================= */
+function AlertsPage() {
+  const { items, logs, locations, moves, tasks, projects, prefs, addLog, updateLog, showToast } = useStore()
+  const nav = useNavigate()
+  const t = today()
+  const horizon = prefs.horizon
+  const itemOf = (id: string) => items.find((x) => x.id === id)
+
+  // Courses : consommables sous seuil + matériaux de projets actifs non couverts
+  interface Course { key: string; name: string; detail: string; need: string; go: string }
+  const courses: Course[] = [
+    ...items.filter(isLowStock).map((i) => ({
+      key: 's-' + i.id, name: i.name,
+      detail: `Stock : ${i.quantity ?? 0}${i.unit ? ' ' + i.unit : ''} / seuil ${i.threshold}`,
+      need: `~${Math.max(1, (i.threshold ?? 0) - (i.quantity ?? 0) + 1)}${i.unit ? ' ' + i.unit : ''}`,
+      go: `/objet/${i.id}`,
+    })),
+    ...tasks.filter((x) => {
+      if (x.done || !x.itemId) return false
+      const it = itemOf(x.itemId)
+      if (!it) return true
+      if (projects.find((p) => p.id === x.projectId)?.status === 'termine') return false
+      return it.isConsumable && it.quantity != null && it.quantity < (x.qty ?? 1)
+    }).map((x) => {
+      const it = x.itemId ? itemOf(x.itemId) : undefined
+      const proj = projects.find((p) => p.id === x.projectId)
+      const miss = Math.max(1, (x.qty ?? 1) - (it?.quantity ?? 0))
+      return {
+        key: 'p-' + x.id, name: `${x.label}${x.qty != null ? ` ×${x.qty}` : ''}`,
+        detail: `${proj?.title ?? 'Projet'} · stock ${it?.quantity ?? 0}`,
+        need: `manque ~${miss}`, go: `/projet/${x.projectId}`,
+      }
+    }),
+  ]
+  const soon = logs
+    .filter((l) => l.reminder && l.reminder <= plusDays(horizon))
+    .sort((a, b) => (a.reminder ?? '').localeCompare(b.reminder ?? ''))
+  const redo = logs
+    .filter((l) => l.repeat && addMonthsISO(l.date, parseInt(l.repeat) || 0) <= plusDays(horizon))
+    .sort((a, b) => addMonthsISO(a.date, parseInt(a.repeat) || 0).localeCompare(addMonthsISO(b.date, parseInt(b.repeat) || 0)))
+  const dueOf = (l: (typeof redo)[number]) => addMonthsISO(l.date, parseInt(l.repeat) || 0)
+  const lateMoves = moves
+    .filter((l) => !l.returned && l.due != null && l.due < t)
+    .sort((a, b) => (a.due ?? '').localeCompare(b.due ?? ''))
+  const guarantees = items
+    .map((i) => ({ i, u: warrantyUntil(i) }))
+    .filter(({ u }) => u != null && u <= plusDays(60))
+    .sort((a, b) => (a.u ?? '').localeCompare(b.u ?? ''))
+
+  return (
+    <div className="mx-auto w-full max-w-2xl space-y-6">
+      <section aria-label="Courses">
+        <SectionTitle aside={courses.length > 0 ? `${courses.length} article${courses.length > 1 ? 's' : ''}` : undefined}>Courses ({courses.length})</SectionTitle>
+        {courses.length === 0 ? <Empty title="Rien à acheter" hint="Consommables sous leur seuil et matériaux manquants apparaîtront ici." /> : (
+          <ul className="space-y-2">{courses.map((c) => (
+            <li key={c.key}><button onClick={() => nav(c.go)} className="flex w-full items-center gap-2 rounded-2xl bg-white dark:bg-neutral-900 p-3 text-left text-sm shadow-sm active:scale-[0.99]">
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={c.name}>{c.name}</span>
+                <span className="block truncate text-xs text-neutral-500">{c.detail}</span></span>
+              <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">{c.need}</span>
+              <Chevron />
+            </button></li>))}</ul>)}
+      </section>
+      <section aria-label="Rappels d'entretien">
+        <SectionTitle>Rappels ({soon.length})</SectionTitle>
+        {soon.length === 0 ? <Empty title="Aucun rappel" hint="Ajoutez un rappel depuis la fiche d’un objet." /> : (
+          <ul className="space-y-2">{soon.map((l) => (
+            <li key={l.id} className="rounded-2xl bg-white dark:bg-neutral-900 p-3 text-sm shadow-sm">
+              <div className="flex gap-2"><strong className="truncate flex-1">{l.action} — {itemOf(l.itemId)?.name ?? 'Objet supprimé'}</strong>
+                <span className={`shrink-0 font-semibold ${l.reminder! < t ? 'text-red-600 dark:text-red-400' : 'text-amber-700 dark:text-amber-300'}`}>{fmtDate(l.reminder)}</span></div>
+              <p className="text-xs text-neutral-500">Où : {locationLabel(locations.find((x) => x.id === itemOf(l.itemId)?.locationId))}</p>
+            </li>))}</ul>)}
+      </section>
+      <section aria-label="Entretiens à refaire">
+        <SectionTitle>À réviser ({redo.length})</SectionTitle>
+        {redo.length === 0 ? <Empty title="Rien à réviser" hint="Les entretiens récurrents échus apparaîtront ici." /> : (
+          <ul className="space-y-2">{redo.map((l) => (
+            <li key={l.id} className="flex items-center gap-2 rounded-2xl bg-white dark:bg-neutral-900 p-3 text-sm shadow-sm">
+              <div className="min-w-0 flex-1">
+                <p className="truncate font-medium" title={`${l.action} — ${itemOf(l.itemId)?.name ?? ''}`}>{l.action} — {itemOf(l.itemId)?.name ?? 'Objet supprimé'}</p>
+                <p className="text-xs text-neutral-500">{repeatLabel(l.repeat)} · dû le {fmtDate(dueOf(l))} · dernier le {fmtDate(l.date)}</p>
+              </div>
+              <button className={`${btnGhost} shrink-0 px-3 text-xs`} onClick={() => {
+                updateLog(l.id, { repeat: '' })
+                addLog({ id: uid(), itemId: l.itemId, date: today(), action: l.action, note: '', reminder: null, repeat: l.repeat })
+                showToast('Entretien marqué refait')
+              }}>Refait ✓</button>
+            </li>))}</ul>)}
+      </section>
+      <section aria-label="Objets à récupérer">
+        <SectionTitle>À récupérer ({lateMoves.length})</SectionTitle>
+        {lateMoves.length === 0 ? <Empty title="Aucun retard" hint="Les objets déplacés dont la date de retour est passée apparaîtront ici." /> : (
+          <ul className="space-y-2">{lateMoves.map((l) => (
+            <li key={l.id}><button onClick={() => nav('/deplaces')} className="flex w-full items-center gap-2 rounded-2xl bg-white dark:bg-neutral-900 p-3 text-left text-sm shadow-sm">
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium">{items.find((x) => x.id === l.itemId)?.name ?? 'Objet supprimé'}</span>
+                <span className="block truncate text-xs text-neutral-500">{moveKindLabel(l.kind)} · {l.toWho} · dû le {fmtDate(l.due)}</span></span>
+              <span className="shrink-0 rounded-full bg-red-600 px-2 py-0.5 text-xs font-semibold text-white">En retard</span>
+              <Chevron />
+            </button></li>))}</ul>)}
+      </section>
+      <section aria-label="Garanties">
+        <SectionTitle>Garanties ({guarantees.length})</SectionTitle>
+        {guarantees.length === 0 ? <Empty title="Garanties OK" hint="Renseignez date d’achat + garantie sur vos outils et appareils." /> : (
+          <ul className="space-y-2">{guarantees.map(({ i, u }) => (
+            <li key={i.id}><button onClick={() => nav(`/objet/${i.id}`)} className="flex w-full items-center gap-2 rounded-2xl bg-white dark:bg-neutral-900 p-3 text-left text-sm shadow-sm">
+              <span className="min-w-0 flex-1"><span className="block truncate font-medium" title={i.name}>{i.name}</span>
+                <span className="block truncate text-xs text-neutral-500">Jusqu’au {fmtDate(u)}</span></span>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${u! < t ? 'bg-red-600 text-white' : 'bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100'}`}>{u! < t ? 'Expirée' : 'Expire bientôt'}</span>
+              <Chevron />
+            </button></li>))}</ul>)}
+      </section>
+    </div>
+  )
+}
+
+/* ================= Objets déplacés (prêtés, ailleurs, en réparation) ================= */
+function MovesPage() {
+  const { moves, items, addMove, toggleMoveReturned, removeMove, showToast } = useStore()
+  const [open, setOpen] = useState(false)
+  const [itemId, setItemId] = useState('')
+  const [toWho, setToWho] = useState('')
+  const [due, setDue] = useState('')
+  const [kind, setKind] = useState<MoveKind>('pret')
+  const active = moves.filter((l) => !l.returned)
+  const done = moves.filter((l) => l.returned)
+  const nameOf = (id: string) => items.find((x) => x.id === id)?.name ?? 'Objet supprimé'
+  const isLate = (l: (typeof moves)[number]) => !l.returned && l.due != null && l.due < today()
+  const reset = () => { setOpen(false); setItemId(''); setToWho(''); setDue(''); setKind('pret') }
+  return (
+    <div className="mx-auto w-full max-w-2xl space-y-6">
+      <div className="flex items-center justify-between">
+        <h2 className="font-bold">Hors place ({active.length})</h2>
+        <button className={btnPrimary} onClick={() => setOpen(true)}>+ Déplacer</button>
+      </div>
+      {active.length === 0 ? <Empty title="Tout est à sa place" hint="Signalez ici un objet prêté, rangé ailleurs ou en réparation." /> : (
+        <ul className="space-y-2">{active.map((l) => (
+          <li key={l.id} className="flex items-center gap-2 rounded-2xl bg-white dark:bg-neutral-900 p-3 text-sm shadow-sm">
             <div className="min-w-0 flex-1">
               <p className="flex items-center gap-2">
                 <span className="min-w-0 flex-1 truncate font-semibold" title={nameOf(l.itemId)}>{nameOf(l.itemId)}</span>
