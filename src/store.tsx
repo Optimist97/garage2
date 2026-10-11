@@ -435,11 +435,8 @@ export function StoreProvider({ children }: { children: React.ReactNode }) {
     },
     changePassword: async (current, next) => {
       const c = supa(); if (!c) return 'La gestion du mot de passe est indisponible en mode local.'
-      const { data: { user } } = await c.auth.getUser()
-      if (!user?.email) return 'Session expirée. Reconnectez-vous.'
-      const { error: verifyError } = await c.auth.signInWithPassword({ email: user.email, password: current })
-      if (verifyError) return 'Le mot de passe actuel est incorrect.'
-      const { error } = await c.auth.updateUser({ password: next })
+      const { error } = await c.auth.updateUser({ password: next, current_password: current })
+      if (error?.code === 'reauthentication_needed' || error?.message.toLowerCase().includes('current password')) return 'Le mot de passe actuel est incorrect.'
       return error ? 'Impossible de mettre à jour le mot de passe.' : 'Mot de passe mis à jour.'
     },
     signOut: async () => { await supa()?.auth.signOut(); localStorage.removeItem(KEY); setData(emptyData()); setUserEmail(null) },

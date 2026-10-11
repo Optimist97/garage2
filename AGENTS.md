@@ -6,7 +6,7 @@ Application personnelle en français pour inventaire de garage et projets DIY. I
 
 - `npm ci`, `npm run dev`, `npm run build`, `npm run preview`.
 - Sans variables `VITE_SUPABASE_URL` et `VITE_SUPABASE_ANON_KEY`, l’application fonctionne en local avec `localStorage` (`garage2-data-v1`).
-- Avec ces variables, l’page dédiée `#/connexion` utilise Supabase Auth mot de passe sur `#/connexion` avec réinitialisation e-mail; Réglages permet de modifier le mot de passe (vérification de l’ancien) ou de demander un lien de récupération. Aucun formulaire d’inscription publique. Les données cloud sont isolées par `auth.uid()` et RLS.
+- Avec ces variables, l’page dédiée `#/connexion` utilise Supabase Auth mot de passe sur `#/connexion` avec réinitialisation e-mail; Réglages permet de modifier le mot de passe (vérification native de l’ancien) ou de demander un lien. Pour envoyer hors membres de l’organisation, configurer SMTP personnalisé dans Supabase Auth. Aucun formulaire d’inscription publique. Les données cloud sont isolées par `auth.uid()` et RLS.
 - Le dépôt public GitHub Pages ne doit contenir que le client Supabase public (anon/publishable). Jamais de `service_role`, clé secrète, mot de passe, fichier `.env` ou export utilisateur. `.gitignore` protège `.env*` sauf `.env.example`.
 
 ## Carte du code
@@ -41,6 +41,6 @@ Après toute évolution DB, exécuter `supabase/schema.sql` dans SQL Editor puis
 
 ## Déploiement et vérification
 
-Dépôt public : `Optimist97/garage2`; site : `https://optimist97.github.io/garage2/`; Pages par GitHub Actions. La workflow requiert les secrets de dépôt `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, utilisés uniquement pendant le build public. Supabase Auth URL Configuration doit autoriser l’origine Pages et les inscriptions doivent rester désactivées pour le mode utilisateur unique. Vérifier le rapport Actions, chargement mobile/desktop, connexion, CRUD, synchronisation sur un second appareil, mode hors ligne, restauration de mot de passe, export/import, et l’absence de clé secrète dans le JS construit.
+Dépôt public : `Optimist97/garage2`; site : `https://optimist97.github.io/garage2/`; Pages par GitHub Actions. La workflow requiert les secrets de dépôt `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`, utilisés uniquement pendant le build public. Supabase Auth URL Configuration doit autoriser l’origine Pages et les inscriptions doivent rester désactivées pour le mode utilisateur unique. Vérifier le rapport Actions, chargement mobile/desktop, connexion, CRUD, synchronisation sur un second appareil, mode hors ligne, restauration de mot de passe (SMTP personnalisé requis hors membres de l’organisation), export/import, et l’absence de clé secrète dans le JS construit.
 
 Historique de cette reprise : ajout d’un écran Auth mot de passe, synchro au chargement/retour d’onglet et file hors-ligne, schéma RLS renforcé et contraintes par propriétaire, marqueur des exemples démo + masquage local, banque de 9 modèles de projet, `.gitignore` étendu. Les données fictives sont distinctement marquées et ne contiennent pas de renseignements personnels.
