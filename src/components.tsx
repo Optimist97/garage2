@@ -89,6 +89,14 @@ export function Toaster() {
 }
 
 /* ---------- Petits éléments ---------- */
+export function Logo({ size = 'md' }: { size?: 'md' | 'lg' }) {
+  const cls = size === 'lg' ? 'text-2xl' : 'text-xl'
+  return (
+    <span className={`${cls} font-bold tracking-tight`} aria-label="garage2.">
+      garage2<span className="text-[var(--accent)]" aria-hidden>.</span>
+    </span>
+  )
+}
 export const Field = ({ label, children }: { label: string; children: React.ReactNode }) => (
   <label className="block">
     <span className="mb-1 block text-sm font-medium">{label}</span>
@@ -96,7 +104,7 @@ export const Field = ({ label, children }: { label: string; children: React.Reac
   </label>
 )
 export const inputCls = 'w-full touch-target rounded-xl border border-neutral-300 dark:border-neutral-700 bg-white dark:bg-neutral-800 px-3 text-base'
-export const btnPrimary = 'touch-target rounded-xl bg-amber-400 px-4 font-semibold text-neutral-900 hover:bg-amber-300 active:bg-amber-500 disabled:opacity-50'
+export const btnPrimary = 'touch-target rounded-xl bg-[var(--accent)] px-4 font-semibold text-[var(--accent-ink)] hover:bg-[var(--accent-hover)] active:opacity-90 disabled:opacity-50'
 export const btnGhost = 'touch-target rounded-xl bg-neutral-200 dark:bg-neutral-800 px-4 font-medium hover:bg-neutral-300 dark:hover:bg-neutral-700'
 
 export function Empty({ title, hint, action }: { title: string; hint: string; action?: React.ReactNode }) {
@@ -126,5 +134,40 @@ export function CondBadge({ c }: { c: string }) {
     moyen: 'bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100',
     hs: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100',
   }
-  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${map[c] ?? 'bg-neutral-200'}`}>{c}</span>
+  const labels: Record<string, string> = { neuf: 'Neuf', bon: 'Bon', moyen: 'Moyen', hs: 'Hors service' }
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${map[c] ?? 'bg-neutral-200 dark:bg-neutral-700'}`}>{labels[c] ?? c}</span>
+}
+
+export function StatusBadge({ s, label }: { s: string; label: string }) {
+  const map: Record<string, string> = {
+    idee: 'bg-neutral-200 text-neutral-700 dark:bg-neutral-700 dark:text-neutral-200',
+    encours: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100',
+    pause: 'bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100',
+    termine: 'bg-green-100 text-green-800 dark:bg-green-900 dark:text-green-100',
+    pret: 'bg-blue-100 text-blue-800 dark:bg-blue-900 dark:text-blue-100',
+    ailleurs: 'bg-amber-100 text-amber-900 dark:bg-amber-900 dark:text-amber-100',
+    reparation: 'bg-red-100 text-red-800 dark:bg-red-900 dark:text-red-100',
+  }
+  return <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-semibold ${map[s] ?? 'bg-neutral-200'}`}>{label}</span>
+}
+
+export function Progress({ pct }: { pct: number }) {
+  return (
+    <div className="h-2 w-full overflow-hidden rounded-full bg-neutral-200 dark:bg-neutral-700" role="progressbar" aria-valuenow={pct} aria-valuemin={0} aria-valuemax={100} aria-label={`Avancement ${pct} %`}>
+      <div className={`h-full rounded-full transition-all ${pct >= 100 ? 'bg-green-500' : 'bg-[var(--accent)]'}`} style={{ width: `${pct}%` }} />
+    </div>
+  )
+}
+
+/* Chevrons et en-têtes de section homogènes */
+export function Chevron() {
+  return <span aria-hidden className="shrink-0 pl-1 text-lg leading-none text-neutral-300 dark:text-neutral-600">›</span>
+}
+export function SectionTitle({ children, aside }: { children: React.ReactNode; aside?: React.ReactNode }) {
+  return (
+    <div className="mb-2 flex items-baseline justify-between gap-2">
+      <h2 className="font-bold">{children}</h2>
+      {aside && <span className="shrink-0 text-xs text-neutral-500">{aside}</span>}
+    </div>
+  )
 }

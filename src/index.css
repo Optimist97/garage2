@@ -27,3 +27,15 @@ body {
 }
 input, select, textarea { font-size: 16px; } /* évite le zoom iOS */
 :focus-visible { outline: 2px solid #2563eb; outline-offset: 2px; }
+::selection { background: var(--accent); color: var(--accent-ink); }
+
+/* Couleur d'accent personnalisable (Réglages > Personnalisation) */
+:root, :root[data-accent="ambre"] {
+  --accent: #fbbf24; --accent-hover: #f59e0b; --accent-ink: #18181b;
+}
+:root[data-accent="bleu"] {
+  --accent: #38bdf8; --accent-hover: #0ea5e9; --accent-ink: #082f49;
+}
+:root[data-accent="vert"] {
+  --accent: #34d399; --accent-hover: #10b981; --accent-ink: #052e22;
+}

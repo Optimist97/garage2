@@ -1,7 +1,7 @@
 {
-  "name": "Garage 2",
-  "short_name": "Garage 2",
-  "description": "Contenu du garage : objets, stocks, entretien, prêts.",
+  "name": "garage2.",
+  "short_name": "garage2.",
+  "description": "Contenu du garage : objets, stocks, entretien, prêts, projets DIY.",
   "start_url": "./",
   "scope": "./",
   "display": "standalone",
