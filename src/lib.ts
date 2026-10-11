@@ -81,7 +81,14 @@ export interface Item {
 export interface Log { id: string; itemId: string; date: string; action: string; note: string; reminder?: string | null }
 export interface Loan { id: string; itemId: string; toWho: string; since: string; returned: boolean; note: string }
 
-export const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36)
+// Supabase uses UUID primary/foreign keys; IDs created in the browser must match.
+export const uid = () => {
+  if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') return crypto.randomUUID()
+  return 'xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx'.replace(/[xy]/g, (c) => {
+    const r = Math.random() * 16 | 0
+    return (c === 'x' ? r : (r & 0x3 | 0x8)).toString(16)
+  })
+}
 export const today = () => new Date().toISOString().slice(0, 10)
 export const fmtDate = (d?: string | null) => {
   if (!d) return '—'

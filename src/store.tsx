@@ -19,24 +19,41 @@ const Ctx = createContext<Store | null>(null)
 export const useStore = () => useContext(Ctx) as Store
 
 const KEY = 'garage2-data-v1'
-const seed = (): Data => ({
-  locations: [
-    { id: 'z1', zone: 'Établi', label: 'Étagère A' },
-    { id: 'z2', zone: 'Établi', label: 'Bac 3' },
-    { id: 'z3', zone: 'Fond', label: 'Rack voile' },
-  ],
+const seed = (): Data => {
+  const locations = [
+    { id: uid(), zone: 'Établi', label: 'Étagère A' },
+    { id: uid(), zone: 'Établi', label: 'Bac 3' },
+    { id: uid(), zone: 'Fond', label: 'Rack voile' },
+  ]
+  return {
+  locations,
   items: [
-    { id: uid(), name: 'Dégraissant atelier 5 L', category: 'nettoyage', photo: null, condition: 'bon', quantity: 2, isConsumable: true, threshold: 3, locationId: 'z2', notes: 'Réserve sous l’établi.', details: { contenance: '5 L' }, updatedAt: new Date().toISOString() },
-    { id: uid(), name: 'Aile kite 9 m²', category: 'kite', photo: null, condition: 'bon', quantity: null, isConsumable: false, threshold: null, locationId: 'z3', notes: 'Vérifier les lattes.', details: { taille: '9 m²', type: 'Aile' }, updatedAt: new Date().toISOString() },
+    { id: uid(), name: 'Dégraissant atelier 5 L', category: 'nettoyage', photo: null, condition: 'bon', quantity: 2, isConsumable: true, threshold: 3, locationId: locations[1].id, notes: 'Réserve sous l’établi.', details: { contenance: '5 L' }, updatedAt: new Date().toISOString() },
+    { id: uid(), name: 'Aile kite 9 m²', category: 'kite', photo: null, condition: 'bon', quantity: null, isConsumable: false, threshold: null, locationId: locations[2].id, notes: 'Vérifier les lattes.', details: { taille: '9 m²', type: 'Aile' }, updatedAt: new Date().toISOString() },
   ],
   logs: [], loans: [],
-})
+  }
+}
 
 function load(): Data {
   try {
     const raw = localStorage.getItem(KEY)
     if (!raw) { const s = seed(); localStorage.setItem(KEY, JSON.stringify(s)); return s }
-    return { ...seed(), ...JSON.parse(raw) }
+    const data: Data = { ...seed(), ...JSON.parse(raw) }
+    const isUuid = (id: string) => /^[0-9a-f]{8}-[0-9a-f]{4}-[1-8][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(id)
+    const locationIds = new Map(data.locations.map((l) => [l.id, isUuid(l.id) ? l.id : uid()]))
+    const itemIds = new Map(data.items.map((i) => [i.id, isUuid(i.id) ? i.id : uid()]))
+    return {
+      ...data,
+      locations: data.locations.map((l) => ({ ...l, id: locationIds.get(l.id)! })),
+      items: data.items.map((i) => ({
+        ...i,
+        id: itemIds.get(i.id)!,
+        locationId: i.locationId ? locationIds.get(i.locationId) ?? (isUuid(i.locationId) ? i.locationId : null) : null,
+      })),
+      logs: data.logs.filter((l) => itemIds.has(l.itemId) || isUuid(l.itemId)).map((l) => ({ ...l, itemId: itemIds.get(l.itemId) ?? l.itemId })),
+      loans: data.loans.filter((l) => itemIds.has(l.itemId) || isUuid(l.itemId)).map((l) => ({ ...l, itemId: itemIds.get(l.itemId) ?? l.itemId })),
+    }
   } catch { return seed() }
 }
 
