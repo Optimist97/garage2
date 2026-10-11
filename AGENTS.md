@@ -35,7 +35,7 @@ Application personnelle en français pour inventaire de garage et projets DIY. I
 
 ## Tables et sécurité
 
-Tables `locations`, `items`, `maintenance_logs`, `moves` (ancien nom `loans` migré), `projects`, `project_tasks`. Chaque table a `user_id`; politiques CRUD `authenticated` imposent `auth.uid() = user_id`, et les FK composées interdisent de relier les lignes appartenant à différents comptes. Aucun privilège de table aux rôles `anon` et `public`. La capture/import de photos a été retirée ; les anciennes colonnes `photo_url` sont conservées comme champs historiques inertes pour compatibilité, jamais affichées ni réécrites par le client.
+Tables `locations`, `items`, `maintenance_logs`, `moves` (ancien nom `loans` migré), `projects`, `project_tasks`. Chaque table a `user_id`; politiques CRUD `authenticated` imposent `auth.uid() = user_id`, et les FK composées interdisent de relier les lignes appartenant à différents comptes. Les rôles `anon` et `public` n’ont aucun privilège de table; `authenticated` a seulement `SELECT`, `INSERT`, `UPDATE`, `DELETE` (jamais `TRUNCATE`, `TRIGGER` ou `REFERENCES`), sous RLS. La capture/import de photos a été retirée ; les anciennes colonnes `photo_url` sont conservées comme champs historiques inertes pour compatibilité, jamais affichées ni réécrites par le client.
 
 Après toute évolution DB, exécuter `supabase/schema.sql` dans SQL Editor puis vérifier la présence des six tables, RLS active, politique propriétaire, FK/index et grants. Ne jamais mettre de mot de passe utilisateur dans le dépôt ou demander de le coller dans le chat.
 
